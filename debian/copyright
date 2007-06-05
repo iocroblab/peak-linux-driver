@@ -1,0 +1,27 @@
+This package was debianised by Teemu Ikonen <tpikonen@gmail.com>
+
+It was downloaded from
+ http://www.peak-system.com/linux/files/peak-linux-driver.6.2.tar.gz
+
+Upstream Author: PEAK-System
+
+Copyright:
+   This package is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; version 2 dated June, 1991.
+
+   This package is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+   02110-1301 USA
+
+On Debian GNU/Linux systems, the complete text of the GNU General Public
+License can be found in `/usr/share/common-licenses/GPL'.  This package
+is in non-free even though it is licensed under GPL, because it contains
+binary-only firmware, which is in violation of the Debian Free Software
+Guidelines.

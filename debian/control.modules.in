@@ -1,0 +1,14 @@
+Source: pcan-module-source
+Section: net
+Priority: optional
+Maintainer: Teemu Ikonen <tpikonen@gmail.com>
+Build-Depends: debhelper (>= 5.0.42), debconf-utils, module-assistant
+Standards-Version: 3.7.2
+
+Package: pcan-module-_KVERS_
+Architecture: any
+Depends: modutils | module-init-tools
+Recommends: linux-image-_KVERS_
+Description: PEAK-System CANbus driver for kernel _KVERS_ (binary module)
+ This package provides the source code for the pcan module provided
+ by PEAK-System, made for the Linux kernel _KVERS_.

@@ -1,0 +1,18 @@
+Source: pcan-module-source
+Section: net
+Priority: extra
+Maintainer: Teemu Ikonen <tpikonen@gmail.com>
+Build-Depends: debhelper (>= 5.0.42)
+Build-Depends-Indep: debconf-utils
+Standards-Version: 3.7.2
+
+Package: pcan-module-source
+Architecture: all
+Depends: module-assistant
+Recommends:  dpkg-dev, kernel-package, debhelper (>= 5.0.42), debconf-utils
+Description: module source for PEAK System CANbus interface driver
+ This package provides the source code for the pcan module provided
+ PEAK System. You will need make-kpkg from kernel-package to be able to
+ compile modules usable with a Debian kernel.
+ .
+ Homepage: http://www.peak-system.com/linux/

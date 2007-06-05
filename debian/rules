@@ -1,0 +1,110 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 to 1999 by Joey Hess.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+CFLAGS = -Wall -g
+
+ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -O0
+else
+	CFLAGS += -O2
+endif
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	touch configure-stamp
+
+build: build-stamp
+
+modules/pcan: $(wildcard driver/*) $(wildcard debian/*)
+	mkdir -p modules/pcan/debian
+	cp -dR driver modules/pcan
+	cp debian/*.in debian/copyright debian/rules debian/changelog debian/compat modules/pcan/debian
+	chmod -R ug=rwX,o=rX modules
+
+pcan.tar.gz: modules/pcan
+	tar cf - modules | gzip -9 > pcan.tar.gz
+
+build-stamp: pcan.tar.gz configure-stamp 
+	dh_testdir
+	touch build-stamp
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+	rm -rf pcan.tar.gz modules
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+	cp pcan.tar.gz $(CURDIR)/debian/pcan-module-source/usr/src
+	chmod 0644 $(CURDIR)/debian/pcan-module-source/usr/src/pcan.tar.gz
+
+binary-arch: build install
+
+binary-indep: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs 
+	dh_installdocs
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure
+
+# prefix of the target package name
+PACKAGE=pcan-module
+# modifieable for experiments or debugging m-a
+MA_DIR ?= /usr/share/modass
+# load generic variable handling
+-include $(MA_DIR)/include/generic.make
+# load default rules
+-include $(MA_DIR)/include/common-rules.make
+
+MAJORKVERS=$(shell echo $(KVERS) | cut -f 1 -d .)
+MINORKVERS=$(shell echo $(KVERS) | cut -f 2 -d .)
+
+kdist_clean:
+	-rm -f build-stamp configure-stamp
+	test -f driver/Makefile && $(ROOT_CMD) $(MAKE) -C driver clean || true
+	-dh_clean
+	-rm -f debian/control
+
+kdist_config: prep-deb-files
+
+binary-modules: kdist_config
+	dh_clean -k
+	$(ROOT_CMD) $(MAKE) -C driver
+	dh_installdirs lib/modules/$(KVERS)/pcan
+
+	if [ "$(MINORKVERS)" -le "4" -a "$(MAJORKVERS)" -le "2" ] ; then \
+	  install -m 0644 driver/pcan.o debian/$(PKGNAME)/lib/modules/$(KVERS)/pcan ; \
+	else \
+	  install -m 0644 driver/pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/pcan ; \
+	fi
+
+#	install -m 0644 debian/lintian debian/$(PKGNAME)/usr/share/lintian/overrides/$(PKGNAME)
+	dh_installmodules
+	dh_installchangelogs
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_gencontrol -- -v$(VERSION)
+	dh_md5sums
+	dh_builddeb --destdir=$(DEB_DESTDIR)
