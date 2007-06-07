@@ -20,16 +20,16 @@ configure-stamp:
 
 build: build-stamp
 
-modules/pcan: $(wildcard driver/*) $(wildcard debian/*)
-	mkdir -p modules/pcan/debian
-	cp -dR driver modules/pcan
-	cp debian/*.in debian/copyright debian/rules debian/changelog debian/compat modules/pcan/debian
+modules/pcan-module: $(wildcard driver/*) $(wildcard debian/*)
+	mkdir -p modules/pcan-module/debian
+	cp -dR driver modules/pcan-module
+	cp debian/*.in debian/copyright debian/rules debian/changelog debian/compat modules/pcan-module/debian
 	chmod -R ug=rwX,o=rX modules
 
-pcan.tar.gz: modules/pcan
-	tar cf - modules | gzip -9 > pcan.tar.gz
+pcan-module.tar.gz: modules/pcan-module
+	tar cf - modules | gzip -9 > pcan-module.tar.gz
 
-build-stamp: pcan.tar.gz configure-stamp 
+build-stamp: pcan-module.tar.gz configure-stamp 
 	dh_testdir
 	touch build-stamp
 
@@ -37,7 +37,7 @@ clean:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp configure-stamp
-	rm -rf pcan.tar.gz modules
+	rm -rf pcan-module.tar.gz modules
 	dh_clean
 
 install: build
@@ -45,8 +45,8 @@ install: build
 	dh_testroot
 	dh_clean -k
 	dh_installdirs
-	cp pcan.tar.gz $(CURDIR)/debian/pcan-module-source/usr/src
-	chmod 0644 $(CURDIR)/debian/pcan-module-source/usr/src/pcan.tar.gz
+	cp pcan-module.tar.gz $(CURDIR)/debian/pcan-module-source/usr/src
+	chmod 0644 $(CURDIR)/debian/pcan-module-source/usr/src/pcan-module.tar.gz
 
 binary-arch: build install
 
@@ -84,19 +84,19 @@ kdist_clean:
 	-rm -f build-stamp configure-stamp
 	test -f driver/Makefile && $(ROOT_CMD) $(MAKE) -C driver clean || true
 	-dh_clean
-	-rm -f debian/control
+#	-rm -f debian/control
 
 kdist_config: prep-deb-files
 
 binary-modules: kdist_config
 	dh_clean -k
 	$(ROOT_CMD) $(MAKE) -C driver
-	dh_installdirs lib/modules/$(KVERS)/pcan
+	dh_installdirs lib/modules/$(KVERS)/misc
 
 	if [ "$(MINORKVERS)" -le "4" -a "$(MAJORKVERS)" -le "2" ] ; then \
-	  install -m 0644 driver/pcan.o debian/$(PKGNAME)/lib/modules/$(KVERS)/pcan ; \
+	  install -m 0644 driver/pcan.o debian/$(PKGNAME)/lib/modules/$(KVERS)/misc ; \
 	else \
-	  install -m 0644 driver/pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/pcan ; \
+	  install -m 0644 driver/pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/misc ; \
 	fi
 
 #	install -m 0644 debian/lintian debian/$(PKGNAME)/usr/share/lintian/overrides/$(PKGNAME)
