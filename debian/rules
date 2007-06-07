@@ -90,7 +90,7 @@ kdist_config: prep-deb-files
 
 binary-modules: kdist_config
 	dh_clean -k
-	$(ROOT_CMD) $(MAKE) -C driver
+	$(ROOT_CMD) $(MAKE) -C driver NET=NETDEV_SUPPORT
 	dh_installdirs lib/modules/$(KVERS)/misc
 
 	if [ "$(MINORKVERS)" -le "4" -a "$(MAJORKVERS)" -le "2" ] ; then \
