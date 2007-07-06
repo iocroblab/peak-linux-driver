@@ -32,7 +32,7 @@
 //
 // pcan_usb.c - the outer usb parts for pcan-usb support
 //
-// $Id: pcan_usb.c 506 2007-05-10 19:55:41Z khitschler $
+// $Id: pcan_usb.c 510 2007-05-29 13:07:10Z khitschler $
 //
 //****************************************************************************
 
@@ -149,7 +149,7 @@ static int pcan_usb_write(struct pcandev *dev)
       DPRINTK(KERN_ERR "%s: pcan_usb_write() can't submit! (%d)",DEVICE_NAME, err);
     }
     else
-      atomic_add(1, &dev->port.usb.active_urbs);
+      atomic_inc(&dev->port.usb.active_urbs);
   }
 
   // it's no error if I can't get more data but still a packet was sent
@@ -200,7 +200,7 @@ static int pcan_usb_write_frame(struct pcandev *dev, struct can_frame *cf)
       DPRINTK(KERN_ERR "%s: pcan_usb_write_frame() can't submit! (%d)",DEVICE_NAME, err);
     }
     else
-      atomic_add(1, &dev->port.usb.active_urbs);
+      atomic_inc(&dev->port.usb.active_urbs);
   }
 
   // it's no error if I can't get more data but still a packet was sent
@@ -226,7 +226,7 @@ static void pcan_usb_write_notify(purb_t purb)
   // DPRINTK(KERN_DEBUG "%s: pcan_usb_write_notify() (%d)\n", DEVICE_NAME, purb->status);
 
   // un-register outstanding urb
-  atomic_sub(1, &dev->port.usb.active_urbs);
+  atomic_dec(&dev->port.usb.active_urbs);
 
   // don't count interrupts - count packets
   dev->dwInterruptCounter++;                                
@@ -272,7 +272,7 @@ static void pcan_usb_read_notify(purb_t purb)
   // DPRINTK(KERN_DEBUG "%s: pcan_usb_read_notify() (%d)\n", DEVICE_NAME, purb->status);
 
   // un-register outstanding urb
-  atomic_sub(1, &dev->port.usb.active_urbs);
+  atomic_dec(&dev->port.usb.active_urbs);
 
   // don't count interrupts - count packets
   dev->dwInterruptCounter++;                                
@@ -305,7 +305,7 @@ static void pcan_usb_read_notify(purb_t purb)
       printk(KERN_ERR "%s: pcan_usb_read_notify() can't submit! (%d)",DEVICE_NAME, err);
     }
     else
-      atomic_add(1, &dev->port.usb.active_urbs);
+      atomic_inc(&dev->port.usb.active_urbs);
 
     do
     {
@@ -478,7 +478,7 @@ static int pcan_usb_start(struct pcandev *dev)
   if ((err = __usb_submit_urb(u->read_data)))
     printk(KERN_ERR "%s: pcan_usb_start() can't submit! (%d)\n",DEVICE_NAME, err);
   else
-    atomic_add(1, &dev->port.usb.active_urbs);
+    atomic_inc(&dev->port.usb.active_urbs);
 
   return err;
 }
@@ -602,11 +602,10 @@ static int pcan_usb_device_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended,
 
   DPRINTK(KERN_DEBUG "%s: pcan_usb_device_open(), minor = %d.\n", DEVICE_NAME, dev->nMinor);
 
-  #ifdef NETDEV_SUPPORT /* or in general, when second open() occures?? */
+  // in general, when second open() occures
   // remove and unlink urbs, when interface is already running
   if ((dev->nOpenPaths) && (dev->device_release))
     dev->device_release(dev);
-  #endif
 
   // first action: turn CAN off
   if ((err = pcan_hw_SetCANOff(dev)))
@@ -820,8 +819,6 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
       u->Endpoint[i].wDataSz  = endpoint->wMaxPacketSize;
     }
 
-    spin_lock_init(&u->lock);
-
     init_waitqueue_head(&u->usb_wait_queue);
 
     dev->wInitStep = 1;
@@ -963,8 +960,6 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
       u->Endpoint[i].ucNumber = current_interface_setting->endpoint[i].bEndpointAddress;
       u->Endpoint[i].wDataSz  = current_interface_setting->endpoint[i].wMaxPacketSize;
     }
-
-    spin_lock_init(&u->lock);
 
     init_waitqueue_head(&u->usb_wait_queue);
 

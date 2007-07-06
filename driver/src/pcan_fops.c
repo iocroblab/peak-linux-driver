@@ -34,7 +34,7 @@
 //
 // pcan_fops.c - all file operation functions, exports only struct fops
 //
-// $Id: pcan_fops.c 508 2007-05-18 21:54:03Z khitschler $
+// $Id: pcan_fops.c 510 2007-05-29 13:07:10Z khitschler $
 //
 //****************************************************************************
 
@@ -670,10 +670,11 @@ static int pcan_ioctl_write(struct file *filep, struct pcandev *dev, TPCANMsg *u
 
   if (!err)
   {
-    // pull new transmission
+    // push a new transmission trough ioctl() only if interrupt triggered push was stalled
     mb();
-    if (atomic_cmpxchg(&dev->DataSendReady, 1, 0))
+    if (atomic_read(&dev->DataSendReady))
     {
+      atomic_set(&dev->DataSendReady, 0);
       mb();
 #ifdef XENOMAI
       rtdm_lock_get_irqsave(&ctx->sja_lock, lockctx);
@@ -687,8 +688,7 @@ static int pcan_ioctl_write(struct file *filep, struct pcandev *dev, TPCANMsg *u
     }
     else
     {
-      mb();
-      // DPRINTK(KERN_DEBUG "%s: pushed %d item into Fifo\n", DEVICE_NAME, dev->writeFifo.nStored);
+      // DPRINTK(KERN_DEBUG "%s: pushed %d items into Fifo\n", DEVICE_NAME, dev->writeFifo.nStored);
     }
   }
 
@@ -1362,10 +1362,11 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
           if (err)
             return err;
 
-          // pull new transmission
+          // push a new transmission trough ioctl() only if interrupt triggered push was stalled
           mb();
-          if (atomic_cmpxchg(&dev->DataSendReady, 1, 0))
+          if (atomic_read(&dev->DataSendReady))
           {
+            atomic_set(&dev->DataSendReady, 0);
             mb();
             if ((err = dev->device_write(dev)))
             {
@@ -1375,8 +1376,7 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
           }
           else
           {
-            mb();
-            // DPRINTK(KERN_DEBUG "%s: pushed %d item into Fifo\n", DEVICE_NAME, dev->writeFifo.nStored);
+            // DPRINTK(KERN_DEBUG "%s: pushed %d items into Fifo\n", DEVICE_NAME, dev->writeFifo.nStored);
           }
         }
       }

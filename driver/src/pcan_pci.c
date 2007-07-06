@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pci
 // 
-// $Id: pcan_pci.c 486 2007-03-14 08:05:18Z edouard $
+// $Id: pcan_pci.c 513 2007-06-01 12:10:28Z khitschler $
 //
 //****************************************************************************
 
@@ -138,15 +138,12 @@ static irqreturn_t IRQHANDLER(pcan_pci_irqhandler, int irq, void *dev_id, struct
 
   // select and clear in Pita stored interrupt 
   PitaICRLow = readw(dev->port.pci.pvVirtConfigPort);  // PITA_ICR
-  if (dev->props.ucMasterDevice == CHANNEL_SLAVE)
+  switch (dev->port.pci.nChannel)
   {
-    if (PitaICRLow & 0x0001)
-      writew(0x0001, dev->port.pci.pvVirtConfigPort);
-  } 
-  else // it is CHANNEL_SINGLE or CHANNEL_MASTER
-  {
-    if (PitaICRLow & 0x0002)
-      writew(0x0002, dev->port.pci.pvVirtConfigPort);
+    case 0: if (PitaICRLow & 0x0002) writew(0x0002, dev->port.pci.pvVirtConfigPort); break;
+    case 1: if (PitaICRLow & 0x0001) writew(0x0001, dev->port.pci.pvVirtConfigPort); break;
+    case 2: if (PitaICRLow & 0x0040) writew(0x0040, dev->port.pci.pvVirtConfigPort); break;
+    case 3: if (PitaICRLow & 0x0080) writew(0x0080, dev->port.pci.pvVirtConfigPort); break;
   }
 
   return PCAN_IRQ_RETVAL(ret);
@@ -181,12 +178,15 @@ static int pcan_pci_req_irq(struct pcandev *dev)
       return err;
     #endif
     
-    // enable interrupt depending if SLAVE, MASTER, SINGLE
+    // enable interrupt again
     PitaICRHigh = readw(dev->port.pci.pvVirtConfigPort + PITA_ICR + 2);
-    if (dev->props.ucMasterDevice == CHANNEL_SLAVE)
-      PitaICRHigh |= 0x0001;
-    else
-      PitaICRHigh |= 0x0002;  
+    switch (dev->port.pci.nChannel)
+    {
+      case 0: PitaICRHigh |= 0x0002; break; // bit 17 (-16 = 1)
+      case 1: PitaICRHigh |= 0x0001; break; // bit 16 (-16 = 0)
+      case 2: PitaICRHigh |= 0x0040; break; // bit 22 (-16 = 6)
+      case 3: PitaICRHigh |= 0x0080; break; // bit 23 (-16 = 7)
+    }      
     writew(PitaICRHigh, dev->port.pci.pvVirtConfigPort + PITA_ICR + 2); 
     
     dev->wInitStep++;
@@ -201,12 +201,15 @@ static void pcan_pci_free_irq(struct pcandev *dev)
   
   if (dev->wInitStep == 6)
   {
-    // disable interrupt, polarity 0
+    // disable interrupt
     PitaICRHigh = readw(dev->port.pci.pvVirtConfigPort + PITA_ICR + 2);
-    if (dev->props.ucMasterDevice == CHANNEL_SLAVE)
-      PitaICRHigh &= ~0x0001;
-    else
-      PitaICRHigh &= ~0x0002;  
+    switch (dev->port.pci.nChannel)
+    {
+      case 0: PitaICRHigh &= ~0x0002; break;
+      case 1: PitaICRHigh &= ~0x0001; break;
+      case 2: PitaICRHigh &= ~0x0040; break;
+      case 3: PitaICRHigh &= ~0x0080; break;
+    }      
     writew(PitaICRHigh, dev->port.pci.pvVirtConfigPort + PITA_ICR + 2); 
   
     #ifndef XENOMAI
@@ -228,10 +231,10 @@ static int pcan_pci_cleanup(struct pcandev *dev)
     case 4: iounmap(dev->port.pci.pvVirtPort);
     case 3: 
            release_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE);
-    case 2: if (dev->props.ucMasterDevice != CHANNEL_SLAVE)
+    case 2: if (dev->port.pci.nChannel == 0)
               iounmap(dev->port.pci.pvVirtConfigPort);  
     case 1: 
-            if (dev->props.ucMasterDevice != CHANNEL_SLAVE)
+            if (dev->port.pci.nChannel == 0)
               release_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE);  
     case 0: pcan_delete_filter_chain(dev->filter); 
            dev->filter = NULL;
@@ -256,11 +259,11 @@ static int pcan_pci_release(struct pcandev *dev)
   return 0;
 }
 
-static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16 wIrq, u8 ucMasterDevice, struct pcandev *master_dev)
+static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16 wIrq, struct pcandev *master_dev)
 {
   DPRINTK(KERN_DEBUG "%s: pcan_pci_init(), _pci_devices = %d\n", DEVICE_NAME, _pci_devices);
 
-  dev->props.ucMasterDevice = ucMasterDevice;
+  dev->props.ucMasterDevice = CHANNEL_MASTER; // obsoloete - will be removed soon
     
   // init process wait queues
   init_waitqueue_head(&dev->read_queue);
@@ -287,8 +290,8 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
   if (!dwPort || !wIrq)
     return -EINVAL;
 
-  // do it only if the device is channel master
-  if (dev->props.ucMasterDevice != CHANNEL_SLAVE)
+  // do it only if the device is channel master, and channel 0 is it always
+  if (dev->port.pci.nChannel == 0)
   {
     if (check_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE))
       return -EBUSY;
@@ -306,10 +309,7 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
     // configuration of the PCI chip, part 2
     writew(0x0005, dev->port.pci.pvVirtConfigPort + PITA_GPIOICR + 2);  //set GPIO control register
     
-    if (dev->props.ucMasterDevice == CHANNEL_MASTER)
-      writeb(0x00, dev->port.pci.pvVirtConfigPort + PITA_GPIOICR); // enable both
-    else
-      writeb(0x04, dev->port.pci.pvVirtConfigPort + PITA_GPIOICR); // enable single
+    writeb(0x00, dev->port.pci.pvVirtConfigPort + PITA_GPIOICR);   // enable all channels
       
     writeb(0x05, dev->port.pci.pvVirtConfigPort + PITA_MISC + 3);  // toggle reset
     mdelay(5);
@@ -341,12 +341,70 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
 }
 
 //----------------------------------------------------------------------------
+// create one pci based devices from peak - this may be one of multiple from a card
+static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pcandev *master_dev, struct pcandev **dev)
+{
+  struct pcandev *local_dev = NULL;
+  int result = 0;
+  
+  DPRINTK(KERN_DEBUG "%s: create_one_pci_device(nChannel=%d)\n", DEVICE_NAME, nChannel);
+  
+  // make the first device on board 
+  if ((local_dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_KERNEL)) == NULL)
+  {
+    result = -ENOMEM;
+    goto fail;
+  }
+      
+  pcan_soft_init(local_dev, "pci", HW_PCI);
+  
+  local_dev->device_open       = sja1000_open;
+  local_dev->device_write      = sja1000_write;
+  local_dev->device_release    = sja1000_release;
+  local_dev->port.pci.nChannel = nChannel;
+  
+  #ifdef NETDEV_SUPPORT
+  local_dev->netdevice_write  = sja1000_write_frame;
+  #endif
+  
+  local_dev->props.ucExternalClock = 1;
+  
+  result = pcan_pci_init(local_dev, (u32)pciDev->resource[0].start, 
+             (u32)pciDev->resource[1].start + nChannel * 0x400,  (u16)pciDev->irq, master_dev);        
+  
+  if (!result)
+    result = sja1000_probe(local_dev);         
+   
+  if (result)
+  {
+    local_dev->cleanup(local_dev);
+    kfree(local_dev);
+    *dev = NULL;
+  }
+  else
+  {
+    local_dev->ucPhysicallyInstalled = 1;
+    list_add_tail(&local_dev->list, &pcan_drv.devices);  // add this device to the list
+    pcan_drv.wDeviceCount++;
+    *dev = local_dev;
+  }
+  
+  fail:
+  if (result)
+  {
+    DPRINTK(KERN_DEBUG "%s: create_one_pci_device(nChannel=%d) discarded - %d\n", DEVICE_NAME, nChannel, result);
+  }
+  
+  return result;
+}
+
+//----------------------------------------------------------------------------
 // search all pci based devices from peak
 int pcan_search_and_create_pci_devices(void)
 {
   int result = 0;
-  int found  = 0;
-  struct pcandev *dev = NULL;
+  struct pcandev *dev        = NULL;
+  struct pcandev *master_dev = NULL;
   
   // search pci devices
   DPRINTK(KERN_DEBUG "%s: search_and_create_pci_devices()\n", DEVICE_NAME);
@@ -378,113 +436,43 @@ int pcan_search_and_create_pci_devices(void)
         // get the PCI Subsystem-ID
         result = pci_read_config_word(pciDev, 0x2E, &wSubSysID);
         if (result)
-          break;
+          goto fail;
 
         // configure the PCI chip, part 1
         result = pci_write_config_word(pciDev, 0x04, 2);
         if (result)
-          break;
+          goto fail;
           
         result = pci_write_config_word(pciDev, 0x44, 0);
         if (result)
-          break;
+          goto fail;
         wmb();
           
-        // make the first device on board 
-        if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_KERNEL)) == NULL)
-        {
-          result = -ENOMEM;
-          break;
-        }
-            
-        pcan_soft_init(dev, "pci", HW_PCI);
+        // 1 channel per card
+        if ((result = create_one_pci_device(pciDev, 0, NULL, &dev))) goto fail;
+        master_dev = dev;
         
-        dev->device_open    = sja1000_open;
-        dev->device_write   = sja1000_write;
-        dev->device_release = sja1000_release;
-        #ifdef NETDEV_SUPPORT
-        dev->netdevice_write  = sja1000_write_frame;
-        #endif
-        
-        dev->props.ucExternalClock = 1;
-  
-        result = pcan_pci_init(dev, (u32)pciDev->resource[0].start, (u32)pciDev->resource[1].start, 
-                                            (u16)pciDev->irq, (wSubSysID > 3) ? CHANNEL_MASTER : CHANNEL_SINGLE, NULL);        
-        
-        if (!result)
-          result = sja1000_probe(dev);         
-         
+        if (wSubSysID >=4)   // add a 2nd channel per card
+          if ((result = create_one_pci_device(pciDev, 1, master_dev, &dev))) goto fail;            
+        if (wSubSysID >= 10) // add a 3rd channel per card
+          if ((result = create_one_pci_device(pciDev, 2, master_dev, &dev))) goto fail;            
+        if (wSubSysID >= 12) // add the 4th channel per card
+          result = create_one_pci_device(pciDev, 3, master_dev, &dev); 
+                     
+        fail:
+        #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
         if (result)
-        {
-          dev->cleanup(dev);
-          kfree(dev);
-          break;
-        }
-        else
-        {
-          found++;
-          dev->ucPhysicallyInstalled = 1;
-          list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
-          pcan_drv.wDeviceCount++;
-        }
-
-        if (wSubSysID > 3)
-        {
-          struct pcandev *master_dev = dev;
-    
-          // make the second device on board
-          if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_KERNEL)) == NULL)
-          {
-            result = -ENOMEM;
-            break;
-          }
-
-          pcan_soft_init(dev, "pci", HW_PCI);
-        
-          dev->device_open    = sja1000_open;
-          dev->device_write   = sja1000_write;
-          dev->device_release = sja1000_release;
-          #ifdef NETDEV_SUPPORT
-          dev->netdevice_write  = sja1000_write_frame;
-          #endif
-          
-          dev->props.ucExternalClock = 1;
-        
-          result = pcan_pci_init(dev, (u32)pciDev->resource[0].start, (u32)pciDev->resource[1].start + 0x400, 
-                                              (u16)pciDev->irq, CHANNEL_SLAVE, master_dev);
-          if (!result)
-            result = sja1000_probe(dev);            
-        
-          if (result)
-          {
-            dev->cleanup(dev);
-            kfree(dev);
-            break;
-          }
-          else
-          {
-            found++;
-            dev->ucPhysicallyInstalled = 1;
-            list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
-            pcan_drv.wDeviceCount++;
-          }  
-        }
+          pci_disable_device (pciDev);
+        #endif         
       }
-    } while (pciDev != NULL);
+    } while ((pciDev != NULL) && !result);
     
     DPRINTK(KERN_DEBUG "%s: search_and_create_pci_devices() is OK\n", DEVICE_NAME);
   
     #ifdef UDEV_SUPPORT
-    if ((!result) && (found))
+    if (!result && master_dev) // register only if at least one channel was found
       pcan_pci_register_driver(&pcan_drv.pci_drv);
     #endif
-    
-    #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
-    if ((result) && (pciDev))
-    {
-      pci_disable_device (pciDev);
-    }
-    #endif    
   }  
 
   return result;  

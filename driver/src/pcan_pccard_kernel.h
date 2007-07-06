@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.h 500 2007-04-25 09:19:08Z edouard $
+// $Id: pcan_pccard_kernel.h 513 2007-06-01 12:10:28Z khitschler $
 //
 //****************************************************************************
 
@@ -41,7 +41,6 @@
 // INCLUDES
 #include <src/pcan_common.h>     // must always be the 1st include
 #include <asm/io.h>
-#include <linux/spinlock.h>
 #include <linux/timer.h>         // to support activity scan
 
 #include <pcmcia/cs_types.h>
@@ -61,23 +60,18 @@
 typedef struct pcan_pccard
 {
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
-  struct pcmcia_device *pcc_dev;            // associated system pcmcia device 
+  struct pcmcia_device *pcc_dev;             // associated system pcmcia device 
   #else
   dev_link_t link;
   #endif
   ioaddr_t   basePort;                       // base of io area for all channels
   u_int      commonIrq;                      // irq for all channels
   ioaddr_t   commonPort;                     // channels commonly used port 
-  #ifdef XENOMAI
-  rtdm_mutex_t lock;                         // locking access registers accessed from both channels
-  #else
-  spinlock_t lock;                           // locking access registers accessed from both channels
-  #endif
-  struct    pcandev *dev[PCCARD_CHANNELS];   // point to associated channels
+  struct     pcandev *dev[PCCARD_CHANNELS];  // point to associated channels
   
   #ifndef XENOMAI
-  int    run_activity_timer_cyclic;          // a flag to synchronize stop conditions
-  struct timer_list activity_timer;          // to scan for activity, set the time
+  int       run_activity_timer_cyclic;       // a flag to synchronize stop conditions
+  struct    timer_list activity_timer;       // to scan for activity, set the time
   #endif
   
   dev_node_t node;                           // to satisfy cardmgr needs

@@ -35,7 +35,7 @@
 // global defines to include in all files this module is made of
 // ! this must always the 1st include in all files !
 //
-// $Id: pcan_common.h 508 2007-05-18 21:54:03Z khitschler $
+// $Id: pcan_common.h 513 2007-06-01 12:10:28Z khitschler $
 //
 //****************************************************************************
 
@@ -147,6 +147,6 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous 
 // with SVN 
-#define CURRENT_RELEASE "Release_20070518_n"  // $name$
+#define CURRENT_RELEASE "Release_20070601_n"  // $name$
 
 #endif // __PCAN_COMMON_H__
