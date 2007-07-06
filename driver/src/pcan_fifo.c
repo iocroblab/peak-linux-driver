@@ -32,7 +32,7 @@
 //
 // pcan_fifo.c - manages the ring buffers for read and write data
 //
-// $Id: pcan_fifo.c 451 2007-02-02 10:09:50Z ohartkopp $
+// $Id: pcan_fifo.c 512 2007-06-01 12:06:00Z khitschler $
 //
 //****************************************************************************
 
@@ -59,70 +59,35 @@
 
 //****************************************************************************
 // CODE 
-static inline int not_atomic(void)
-{
-#if defined(in_atomic)
-  #if defined(irqs_disabled)
-    return (!in_atomic() && !irqs_disabled());
-  #else
-    return (!in_atomic());
-  #endif
-#else
-  #if defined(irqs_disabled)
-    return (!irqs_disabled());
-  #else
-    return 1;
-  #endif
-#endif
-}
 
 #ifdef XENOMAI
 
-static inline void init_lock(register FIFO_MANAGER *anchor){}
-static inline void set_lock(register FIFO_MANAGER *anchor){}
-static inline void release_lock(register FIFO_MANAGER *anchor){}
+#define init_lock(lock)           
+#define set_lock(lock, flags)     
+#define release_lock(lock, flags) 
 
+#define DECLARE(flags) 
 #else
 
 // some helpers to sparsely set and release locks
-static inline void init_lock(register FIFO_MANAGER *anchor)
-{
-  // need_irq_restore is global for that specific FIFO and local for the lock
-  anchor->need_irqrestore = 0;
-  spin_lock_init(&anchor->lock);
-}
-  
-static inline void set_lock(register FIFO_MANAGER *anchor)
-{
-  // it s not necessary to lock the lock if you are inside uninterruptible code
-  if (not_atomic())
-  {
-    spin_lock_irqsave(&anchor->lock, anchor->flags);
-    anchor->need_irqrestore = 1;
-  }
-}
-  
-static inline void release_lock(register FIFO_MANAGER *anchor)
-{
-  // release the lock only if you locked it
-  if (anchor->need_irqrestore)
-  {
-    anchor->need_irqrestore = 0;
-    spin_unlock_irqrestore(&anchor->lock, anchor->flags);
-  }
-}
+#define init_lock(lock)           spin_lock_init(lock)
+#define set_lock(lock, flags)     spin_lock_irqsave(lock, flags)
+#define release_lock(lock, flags) spin_unlock_irqrestore(lock, flags)
 
+#define DECLARE(flags)            unsigned long flags
 #endif
 
 int pcan_fifo_reset(register FIFO_MANAGER *anchor)
 {
-  set_lock(anchor);
+  DECLARE(flags);
+  
+  set_lock(&anchor->lock, flags);
   
   anchor->dwTotal       = 0; 
   anchor->nStored       = 0; 
   anchor->r = anchor->w = anchor->bufferBegin; // nothing to read
   
-  release_lock(anchor);
+  release_lock(&anchor->lock, flags);
 
   // DPRINTK(KERN_DEBUG "%s: pcan_fifo_reset() %d %p %pd\n", DEVICE_NAME, anchor->nStored, anchor->r, anchor->w);
 
@@ -136,13 +101,12 @@ int pcan_fifo_init(register FIFO_MANAGER *anchor, void *bufferBegin, void *buffe
   anchor->nCount      = nCount;
   anchor->bufferBegin = bufferBegin;
   anchor->bufferEnd   = bufferEnd;
-  anchor->flags       = 0;
   
   // check for fatal program errors
   if ((anchor->wStepSize < anchor->wCopySize) || (anchor->bufferBegin > anchor->bufferEnd) || (nCount <= 1))
     return -EINVAL;
   
-  init_lock(anchor);
+  init_lock(&anchor->lock);
 
   return pcan_fifo_reset(anchor);
 }
@@ -150,10 +114,11 @@ int pcan_fifo_init(register FIFO_MANAGER *anchor, void *bufferBegin, void *buffe
 int pcan_fifo_put(register FIFO_MANAGER *anchor, void *pvPutData)
 {
   int err = 0;
+  DECLARE(flags);
   
   // DPRINTK(KERN_DEBUG "%s: pcan_fifo_put() %d %p %p\n", DEVICE_NAME, anchor->nStored, anchor->r, anchor->w);
 
-  set_lock(anchor);
+  set_lock(&anchor->lock, flags);
 
   if (anchor->nStored < anchor->nCount)
   {
@@ -170,7 +135,7 @@ int pcan_fifo_put(register FIFO_MANAGER *anchor, void *pvPutData)
   else
     err = -ENOSPC;
     
-  release_lock(anchor); 
+  release_lock(&anchor->lock, flags);
   
   return err;
 }
@@ -179,10 +144,11 @@ int pcan_fifo_put(register FIFO_MANAGER *anchor, void *pvPutData)
 int pcan_fifo_get(register FIFO_MANAGER *anchor, void *pvGetData)
 {
   int err = 0;
+  DECLARE(flags);
   
   // DPRINTK(KERN_DEBUG "%s: pcan_fifo_get() %d %p %p\n", DEVICE_NAME, anchor->nStored, anchor->r, anchor->w);
 
-  set_lock(anchor);
+  set_lock(&anchor->lock, flags);
 
   if (anchor->nStored > 0)
   {
@@ -197,7 +163,7 @@ int pcan_fifo_get(register FIFO_MANAGER *anchor, void *pvGetData)
   else
     err = -ENODATA;
   
-  release_lock(anchor);
+  release_lock(&anchor->lock, flags);
   
   return err;
 }

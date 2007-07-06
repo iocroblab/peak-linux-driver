@@ -29,7 +29,7 @@
 //
 // pcan_usb-kernel.c - the inner parts for pcan-usb support
 //
-// $Id: pcan_usb_kernel.c 491 2007-03-20 21:21:01Z khitschler $
+// $Id: pcan_usb_kernel.c 510 2007-05-29 13:07:10Z khitschler $
 //
 //****************************************************************************
 
@@ -210,7 +210,7 @@ static void pcan_param_xmit_notify(purb_t purb)
   DPRINTK(KERN_DEBUG "%s: pcan_param_xmit_notify() = %d\n", DEVICE_NAME, purb->status);
 
   // un-register outstanding urb
-  atomic_sub(1, &dev->port.usb.active_urbs);
+  atomic_dec(&dev->port.usb.active_urbs);
 
   atomic_set(&dev->port.usb.param_xmit_finished, 1);
 }
@@ -263,7 +263,7 @@ static int pcan_hw_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
     goto fail;
   }
   else
-    atomic_add(1, &dev->port.usb.active_urbs);
+    atomic_inc(&dev->port.usb.active_urbs);
 
   // wait until submit is finished, either normal or thru timeout
   while (!atomic_read(&dev->port.usb.param_xmit_finished))
@@ -331,7 +331,7 @@ static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
       goto fail;
     }
     else
-      atomic_add(1, &u->active_urbs);
+      atomic_inc(&u->active_urbs);
 
     startTime = get_mtime();
     while (!atomic_read(&u->param_xmit_finished) && ((get_mtime() - startTime) < COMMAND_TIMEOUT))

@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_dongle.c 505 2007-05-10 19:53:51Z khitschler $
+// $Id: pcan_dongle.c 512 2007-06-01 12:06:00Z khitschler $
 //
 //****************************************************************************
 
@@ -68,7 +68,6 @@ typedef void IRQHANDLER((*PARPORT_IRQHANDLER), int, void *, struct pt_regs *);
 
 //****************************************************************************
 // GLOBALS
-spinlock_t pcan_lock = SPIN_LOCK_UNLOCKED;
 
 //****************************************************************************
 // LOCALS
@@ -114,12 +113,7 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   #ifndef XENOMAI
   unsigned long flags;
 
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  save_flags(flags);
-  cli();
-  #else
-  spin_lock_irqsave(&pcan_lock, flags);
-  #endif
+  spin_lock_irqsave(&dev->port.dng.lock, flags);
   #endif
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
@@ -131,11 +125,7 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
   #ifndef XENOMAI
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  restore_flags(flags);
-  #else
-  spin_unlock_irqrestore(&pcan_lock, flags);
-  #endif
+  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
   #endif
 
   return  (b1 << 4) | b0 ;
@@ -146,16 +136,11 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   u16 _PA_ = (u16)dev->port.dng.dwPort;
   u16 _PC_ = _PA_ + 2;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
-  #ifndef XENOMAI
+#ifndef XENOMAI
   unsigned long flags;
 
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  save_flags(flags);
-  cli();
-  #else
-  spin_lock_irqsave(&pcan_lock, flags);
-  #endif
-  #endif
+  spin_lock_irqsave(&dev->port.dng.lock, flags);
+#endif
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
   outb(port & 0x1F,               _PA_);
@@ -163,13 +148,9 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   outb(data,                      _PA_);
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
-  #ifndef XENOMAI
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  restore_flags(flags);
-  #else
-  spin_unlock_irqrestore(&pcan_lock, flags);
-  #endif
-  #endif
+#ifndef XENOMAI
+  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
+#endif
 }
 
 // functions for EPP port
@@ -179,16 +160,11 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   u16 _PC_ = _PA_ + 2;
   u8  wert;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
-  #ifndef XENOMAI
+#ifndef XENOMAI
   unsigned long flags;
 
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  save_flags(flags);
-  cli();
-  #else
-  spin_lock_irqsave(&pcan_lock, flags);
-  #endif
-  #endif
+  spin_lock_irqsave(&dev->port.dng.lock, flags);
+#endif
 
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
   outb((port & 0x1F) | 0x80,      _PA_);
@@ -196,13 +172,9 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   wert = inb(_PA_);
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
 
-  #ifndef XENOMAI
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,18)
-  restore_flags(flags);
-  #else
-  spin_unlock_irqrestore(&pcan_lock, flags);
-  #endif
-  #endif
+#ifndef XENOMAI
+  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
+#endif
 
   return wert;
 }
@@ -463,6 +435,8 @@ static int  pcan_dongle_init(struct pcandev *dev, u32 dwPort, u16 wIrq, char *ty
   dev->open        = pcan_dongle_open;
   dev->release     = pcan_dongle_release; 
   dev->filter      = pcan_create_filter_chain();
+
+  spin_lock_init(&dev->port.dng.lock);
 
   // fill struct pcandev, 1st check if a default is set
   if (!dwPort)

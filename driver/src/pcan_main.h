@@ -37,7 +37,7 @@
 //
 // pcan_main.h - global defines to include in all files this module is made of
 //
-// $Id: pcan_main.h 504 2007-05-10 19:52:13Z khitschler $
+// $Id: pcan_main.h 512 2007-06-01 12:06:00Z khitschler $
 //
 //****************************************************************************
 
@@ -175,8 +175,6 @@ typedef struct
   void       *r;                                           // points to the next Msg to read into the read buffer
   void       *w;                                           // points to the next Msg to write into read buffer
   spinlock_t lock;                                         // mutual exclusion lock
-  unsigned long flags;                                     // used by spin_lock_irqsave(..);
-  u8         need_irqrestore;                              // restore irs only if this is set
 } FIFO_MANAGER;
 
 typedef struct
@@ -186,6 +184,7 @@ typedef struct
   void *pvVirtPort;                                        // virtual address of port
   void *pvVirtConfigPort;                                  // only PCI, the virtual address of the config port
   u16  wIrq;                                               // the associated irq level
+  int  nChannel;                                           // associated channel of the card - channel #0 is special
 } PCI_PORT;
 
 typedef struct
@@ -199,6 +198,7 @@ typedef struct
   u8   ucOldDataContent;                                   // the overwritten contents of the port registers
   u8   ucOldControlContent;
   u8   ucOldECRContent;
+  spinlock_t lock;                                         // a helper to manage interfering access to chip registers
 } DONGLE_PORT;
 
 #ifndef XENOMAI
@@ -263,9 +263,8 @@ typedef struct
   u32    dwSerialNumber;                                   // Serial number of device
   u8     ucHardcodedDevNr;                                 // ascending number stored in device to distinguish after hotplug
   u8     ucRevision;                                       // the revision number of the device
-  wait_queue_head_t  usb_wait_queue;                        // wait queue for usb transactions concerning this device
-  spinlock_t lock;                                         // for save start and stop of services
-  atomic_t active_urbs;                                    // not all active urbs for this device
+  wait_queue_head_t  usb_wait_queue;                       // wait queue for usb transactions concerning this device
+  atomic_t active_urbs;                                    // note all active urbs for this device
 
   atomic_t param_xmit_finished;                            // flag set when parameter read is finished
   purb_t   param_urb;                                      // URB structure for parameter read
