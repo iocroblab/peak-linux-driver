@@ -1,3 +1,9 @@
+pcan-module-source (6.4-1) unstable; urgency=low
+
+  * New upstream version
+
+ -- Teemu Ikonen <tpikonen@gmail.com>  Fri,  6 Jul 2007 18:01:42 +0200
+
 pcan-module-source (6.2-1) unstable; urgency=low
 
   * Initial release.
