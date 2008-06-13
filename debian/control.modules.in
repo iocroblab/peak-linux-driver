@@ -1,14 +1,22 @@
-Source: pcan-module-source
+Source: peak-linux-driver
 Section: net
 Priority: optional
 Maintainer: Teemu Ikonen <tpikonen@gmail.com>
 Build-Depends: debhelper (>= 5.0.42), debconf-utils, module-assistant
 Standards-Version: 3.7.2
 
-Package: pcan-module-_KVERS_
+Package: peak-linux-driver-modules-_KVERS_
 Architecture: any
 Depends: modutils | module-init-tools
 Recommends: linux-image-_KVERS_
-Description: PEAK-System CANbus driver for kernel _KVERS_ (binary module)
- This package provides the source code for the pcan module provided
- by PEAK-System, made for the Linux kernel _KVERS_.
+Provides: peak-linux-driver-modules
+Description: PEAK-System CAN-bus driver for kernel _KVERS_ (binary module)
+ This package contains the set of loadable kernel modules for the
+ Controller Area Network interface adapters from PEAK-System.
+ .
+ This package contains the compiled kernel modules for _KVERS_
+ .
+ If you have compiled your own kernel, you will most likely need to build
+ your own peak-linux-driver-modules. The peak-linux-driver-source package has been
+ provided for use with the Debian's module-assistant or kernel-package
+ utilities to produce a version of peak-linux-driver-modules for your kernel.

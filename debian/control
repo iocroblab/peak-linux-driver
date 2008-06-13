@@ -1,18 +1,37 @@
-Source: pcan-module-source
+Source: peak-linux-driver
 Section: net
 Priority: extra
 Maintainer: Teemu Ikonen <tpikonen@gmail.com>
 Build-Depends: debhelper (>= 5.0.42)
 Build-Depends-Indep: debconf-utils
+Homepage: http://www.peak-system.com/linux/
 Standards-Version: 3.7.2
 
-Package: pcan-module-source
+Package: libpcan-dev
+Section: libdevel
+Architecture: any
+Depends: libpcan0 (= ${Source-Version})
+Description: Peak System CAN driver development files
+ PCAN development files.
+
+Package: libpcan0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Replaces: libpcan6
+Provides: libpcan6
+Conflicts: libpcan6
+Description: Peak System CAN driver library 
+ PCAN library and test programs.
+
+Package: peak-linux-driver-source
 Architecture: all
 Depends: module-assistant
 Recommends:  dpkg-dev, kernel-package, debhelper (>= 5.0.42), debconf-utils
-Description: module source for PEAK System CANbus interface driver
- This package provides the source code for the pcan module provided
- PEAK System. You will need make-kpkg from kernel-package to be able to
- compile modules usable with a Debian kernel.
+Description: Source for the peak-linux-driver kernel modules.
+ This package provides the driver source code for CAN-bus interface 
+ products from PEAK-System. These allow communication with the 
+ Controller Area Network through standard PC-buses, such as USB, PCI etc.
  .
- Homepage: http://www.peak-system.com/linux/
+ You will need make-kpkg from kernel-package to be able to
+ compile modules usable with a Debian kernel.

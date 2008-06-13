@@ -1,10 +1,49 @@
-pcan-module-source (6.4-1) unstable; urgency=low
+peak-linux-driver (6.4-6) etch; urgency=low
+
+  * Relocate the modprobe related scripts to libpcan0 package
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Tue, 27 Nov 2007 15:41:46 +0100
+
+peak-linux-driver (6.4-5) etch; urgency=low
+
+  * Fix missing libpcan.so.* files in libpcan0 package
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Tue, 27 Nov 2007 15:17:59 +0100
+
+peak-linux-driver (6.4-4) etch; urgency=low
+
+  * Playing with Provides: Replaces and Conflicts: fields
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Tue, 27 Nov 2007 10:09:21 +0100
+
+peak-linux-driver (6.4-3) etch; urgency=low
+
+  * Include the pcan.h file in the libpcan-dev package instead of the
+    kernel modules package. Also, rename the package to libpcan0 intstead
+    of libpcan6.
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Tue, 27 Nov 2007 09:57:55 +0100
+
+peak-linux-driver (6.4-2) etch; urgency=low
+
+  * Rebuilding package for Debian etch
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Thu, 15 Nov 2007 11:20:15 +0100
+
+peak-linux-driver (6.4-1) etch; urgency=low
+
+  * Initial release
+  * Generate 3 packages: 2 for userspace, one for module-manager.
+
+ -- Peter Soetens <peter.soetens@fmtc.be>  Fri, 27 Jul 2007 10:03:30 +0200
+
+peak-linux-driver (6.4-0) unstable; urgency=low
 
   * New upstream version
 
  -- Teemu Ikonen <tpikonen@gmail.com>  Fri,  6 Jul 2007 18:01:42 +0200
 
-pcan-module-source (6.2-1) unstable; urgency=low
+peak-linux-driver (6.2-1) unstable; urgency=low
 
   * Initial release.
 
