@@ -37,7 +37,7 @@
 //
 // pcan_main.h - global defines to include in all files this module is made of
 //
-// $Id: pcan_main.h 512 2007-06-01 12:06:00Z khitschler $
+// $Id: pcan_main.h 535 2008-02-11 20:36:03Z ohartkopp $
 //
 //****************************************************************************
 
@@ -83,21 +83,21 @@ typedef struct urb urb_t, *purb_t;
 
 #endif
 
-#ifdef XENOMAI
+#ifndef NO_RT
 #include <rtdm/rtdm_driver.h>
 struct pcanctx_rt;
 #endif
 
-/* PF_CAN is on the way into the kernel. But until then the PCAN driver */
-/* includes the current defines in local files can.h and error.h        */
-#undef KERNEL_SOCKETCAN /* use of standard includes? */
+/* PF_CAN is part of the Linux Mainline Kernel since v2.6.25 */
+/* For older Kernels the PCAN driver includes the needed */
+/* defines from private files src/can.h and src/error.h  */
 
-#ifdef KERNEL_SOCKETCAN
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,25)
 #include <linux/can.h>
 #include <linux/can/error.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
-#else /* first release of pcan netdev contains private includes */
+#else /* before 2.6.25 pcan netdev contains private includes */
 #include <src/can.h>
 #include <src/error.h>
 #define ARPHRD_CAN	280	/* to be moved to include/linux/if_arp.h */
@@ -142,6 +142,10 @@ struct pcanctx_rt;
 #define ACTIVITY_INITIALIZED 1          // LED on            - set when the channel is initialized
 #define ACTIVITY_IDLE        2          // LED slow blinking - set when the channel is ready to receive or transmit
 #define ACTIVITY_XMIT        3          // LED fast blinking - set when the channel has received or transmitted
+
+#define CAN_ERROR_ACTIVE     0          // CAN-Bus error states for busStatus - initial and normal state
+#define CAN_ERROR_PASSIVE    1          // receive only state
+#define CAN_BUS_OFF          2          // switched off from Bus
 
 typedef struct chn_props                                   // this structure holds various channel properties 
 {
@@ -201,7 +205,7 @@ typedef struct
   spinlock_t lock;                                         // a helper to manage interfering access to chip registers
 } DONGLE_PORT;
 
-#ifndef XENOMAI
+#ifdef NO_RT
 typedef struct
 {
   struct list_head item;                                   // link anchor for a item with the same irq level
@@ -220,7 +224,7 @@ typedef struct
 {
   u32  dwPort;                                             // the port of the transport layer
   u16  wIrq;                                               // the associated irq level
-#ifndef XENOMAI
+#ifdef NO_RT
   SAME_IRQ_ITEM same;                                      // each ISA_PORT should belong to one SAME_IRQ_LIST
   SAME_IRQ_LIST anchor;                                    // the anchor for one irq level (not used with every ISA_PORT)
   SAME_IRQ_LIST *my_anchor;                                // points to the list of items for the same irq (SAME_IRQ_LIST)
@@ -314,7 +318,7 @@ typedef struct pcandev
   int  (*cleanup)(struct pcandev *dev);                    // cleanup the interface
   int  (*open)(struct pcandev *dev);                       // called at open of a path
   int  (*release)(struct pcandev *dev);                    // called at release of a path
-#ifdef XENOMAI
+#ifndef NO_RT
   int  (*req_irq)(struct rtdm_dev_context *context);       // install the interrupt handler  
 #else
   int  (*req_irq)(struct pcandev *dev);                    // install the interrupt handler
@@ -323,7 +327,7 @@ typedef struct pcandev
 
   int  (*device_open)(struct pcandev *dev, u16 btr0btr1, u8 bExtended, u8 bListenOnly); // open the device itself
   void (*device_release)(struct pcandev *dev);             // release the device itself
-#ifdef XENOMAI
+#ifndef NO_RT
   int  (*device_write)(struct pcandev *dev, struct pcanctx_rt *ctx);               // write the device
 #else
   int  (*device_write)(struct pcandev *dev);               // write the device
@@ -339,6 +343,7 @@ typedef struct pcandev
   
   u8   bExtended;                                          // if 0, no extended frames are accepted
   int  nLastError;                                         // last error written
+  int  busStatus;                                          // follows error status of CAN-Bus
   u32  dwErrorCounter;                                     // counts all fatal errors
   u32  dwInterruptCounter;                                 // counts all interrupts
   u16  wCANStatus;                                         // status of CAN chip
@@ -356,7 +361,7 @@ typedef struct pcandev
   void *filter;                                            // a ID filter - currently associated to device
 } PCANDEV;
 
-#ifdef XENOMAI
+#ifndef NO_RT
 struct pcanctx_rt
 {
   struct pcandev  *dev;                                   // pointer to related device
@@ -427,7 +432,7 @@ typedef struct driverobj
   #endif // UDEV_SUPPORT
 } DRIVEROBJ;
 
-#ifdef XENOMAI
+#ifndef NO_RT
 typedef struct rt_device
 {
   struct list_head list;
@@ -438,7 +443,7 @@ typedef struct rt_device
 //----------------------------------------------------------------------------
 // the global driver object
 extern struct driverobj pcan_drv;
-#ifdef XENOMAI
+#ifndef NO_RT
 extern struct list_head device_list;
 #endif
 
@@ -454,10 +459,8 @@ void frame2msg(struct can_frame *cf, TPCANMsg *msg);
 void msg2frame(struct can_frame *cf, TPCANMsg *msg);
 int  pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv);
 
-#ifdef XENOMAI
-int  xenomai_register_device(struct pcandev *dev);
-void xenomai_unregister_device(struct pcandev *dev);
-#endif
+void dev_unregister(void);
+void remove_dev_list(void);
 
 #endif // __PCAN_MAIN_H__
 

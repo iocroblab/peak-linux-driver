@@ -1,6 +1,3 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
@@ -27,26 +24,47 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
-//****************************************************************************
-
-//****************************************************************************
-//
-// all parts to handle interface specific parts for pcan-isa
-//
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
 //****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
+//
+// pcan_sja1000_rt.c - all about sja1000 init and data handling
+//
+// $Id: pcan_sja1000_rt.c $
+//
+//****************************************************************************
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
 
-#endif // __PCAN_ISA_H__
+#define SJA1000_IRQ_HANDLED RTDM_IRQ_HANDLED
+#define SJA1000_IRQ_NONE RTDM_IRQ_NONE
+
+#define SJA1000_METHOD_ARGS struct pcandev *dev, struct pcanctx_rt *ctx
+
+#define SJA1000_LOCK_IRQSAVE(type) {rtdm_lockctx_t lockctx;\
+                                 rtdm_lock_get_irqsave(&ctx->type, lockctx)
+#define SJA1000_UNLOCK_IRQRESTORE(type) rtdm_lock_put_irqrestore(&ctx->type, lockctx);}
+
+#define SJA1000_WAKEUP_READ() rtdm_event_signal(&ctx->in_event)
+#define SJA1000_WAKEUP_WRITE() rtdm_event_signal(&ctx->out_event)
+#define SJA1000_WAKEUP_EMPTY() if(result == -ENODATA)\
+                                  rtdm_event_signal(&ctx->empty_event)
+
+#define SJA1000_FUNCTION_CALL(name) name(dev,ctx)
+
+//****************************************************************************
+// CODE
+
+int sja1000_irqhandler_rt(rtdm_irq_t *irq_context)
+{
+  struct pcanctx_rt *ctx;
+  struct pcandev *dev;
+
+  ctx = rtdm_irq_get_arg(irq_context, struct pcanctx_rt);
+  dev = ctx->dev;
+
+  return sja1000_irqhandler_common(dev, ctx);
+}
+

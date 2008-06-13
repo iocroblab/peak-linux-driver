@@ -1,11 +1,8 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com
+// www.peak-system.com 
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,26 +24,54 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
-//****************************************************************************
-
-//****************************************************************************
-//
-// all parts to handle interface specific parts for pcan-isa
-//
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
 //****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
+//
+// all parts to handle device interface specific for pcan-pci
+//
+// $Id: pcan_pci_linux.c $
+//
+//****************************************************************************
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+#define PCI_FREE_IRQ() free_irq(dev->port.pci.wIrq, dev)
 
-#endif // __PCAN_ISA_H__
+//****************************************************************************
+// CODE
+
+// a special frame around the default irq handler
+static irqreturn_t IRQHANDLER(pcan_pci_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
+{
+  struct pcandev *dev = (struct pcandev *)dev_id;
+  int ret;
+
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,5,0)
+  ret = IRQHANDLER(sja1000_irqhandler, irq, dev_id, regs);
+  #else
+  IRQHANDLER(sja1000_irqhandler, irq, dev_id, regs);
+  ret = 0; // supress warning about unused variable
+  #endif
+
+  pcan_pci_clear_stored_interrupt(dev);
+
+  return PCAN_IRQ_RETVAL(ret);
+}
+
+// all about interrupt handling
+static int pcan_pci_req_irq(struct pcandev *dev)
+{
+  int err;
+
+  if (dev->wInitStep == 5)
+  {
+    if ((err = request_irq(dev->port.pci.wIrq, pcan_pci_irqhandler, IRQF_DISABLED | IRQF_SHARED, "pcan", dev)))
+      return err;
+
+    pcan_pci_enable_interrupt(dev);
+  }
+
+  return 0;
+}

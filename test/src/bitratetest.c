@@ -25,7 +25,7 @@
 //
 // bitratetest.c - a small program to test the calculation of the bitrates
 //
-// $Id: bitratetest.c 387 2006-05-07 14:42:47Z khitschler $
+// $Id: bitratetest.c 538 2008-02-15 16:06:45Z edouard $
 //
 //****************************************************************************
 
@@ -45,7 +45,7 @@
 #include <stdlib.h>   // strtoul
 #include <libpcan.h>
 #include <src/common.h>
-
+#include <ctype.h>
 //****************************************************************************
 // DEFINES
 #define DEFAULT_NODE "/dev/pcan0"
@@ -53,7 +53,7 @@
 //****************************************************************************
 // GLOBALS
 HANDLE h = NULL;
-char *current_release;
+const char *current_release;
 
 //****************************************************************************
 // LOCALS
@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 {
   char *ptr;
   int i;
-  char *szDeviceNode = DEFAULT_NODE;
+  const char *szDeviceNode = DEFAULT_NODE;
   
   errno = 0;
 

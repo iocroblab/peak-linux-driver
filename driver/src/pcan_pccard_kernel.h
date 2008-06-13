@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.h 513 2007-06-01 12:10:28Z khitschler $
+// $Id: pcan_pccard_kernel.h 541 2008-02-18 17:48:03Z edouard $
 //
 //****************************************************************************
 
@@ -69,10 +69,8 @@ typedef struct pcan_pccard
   ioaddr_t   commonPort;                     // channels commonly used port 
   struct     pcandev *dev[PCCARD_CHANNELS];  // point to associated channels
   
-  #ifndef XENOMAI
   int       run_activity_timer_cyclic;       // a flag to synchronize stop conditions
   struct    timer_list activity_timer;       // to scan for activity, set the time
-  #endif
   
   dev_node_t node;                           // to satisfy cardmgr needs
 } PCAN_PCCARD;

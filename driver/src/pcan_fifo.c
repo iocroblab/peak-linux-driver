@@ -32,7 +32,7 @@
 //
 // pcan_fifo.c - manages the ring buffers for read and write data
 //
-// $Id: pcan_fifo.c 512 2007-06-01 12:06:00Z khitschler $
+// $Id: pcan_fifo.c 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
@@ -60,7 +60,7 @@
 //****************************************************************************
 // CODE 
 
-#ifdef XENOMAI
+#ifndef NO_RT
 
 #define init_lock(lock)           
 #define set_lock(lock, flags)     

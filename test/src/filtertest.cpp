@@ -25,7 +25,7 @@
 //
 // filtertest.cpp - a simple program to test CAN filter settings
 //
-// $Id: filtertest.cpp 454 2007-02-11 22:18:01Z khitschler $
+// $Id: filtertest.cpp 538 2008-02-15 16:06:45Z edouard $
 //
 //****************************************************************************
 
@@ -54,7 +54,7 @@
 //****************************************************************************
 // GLOBALS
 HANDLE h = NULL;
-char *current_release;
+const char *current_release;
 
 //****************************************************************************
 // LOCALS
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
   int  i;
   int  err;
   
-  char  *szDevNode = DEFAULT_NODE;
+  const char  *szDevNode = DEFAULT_NODE;
   __u32 lower_ID = 0;
   __u32 upper_ID = CAN_MAX_EXTENDED_ID;
   __u8  msgtype  = MSGTYPE_EXTENDED;

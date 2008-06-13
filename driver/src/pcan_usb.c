@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2003-2007  PEAK System-Technik GmbH
+// Copyright (C) 2003-2008  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -32,7 +32,7 @@
 //
 // pcan_usb.c - the outer usb parts for pcan-usb support
 //
-// $Id: pcan_usb.c 510 2007-05-29 13:07:10Z khitschler $
+// $Id: pcan_usb.c 534 2008-02-04 21:34:07Z khitschler $
 //
 //****************************************************************************
 
@@ -739,131 +739,127 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   DPRINTK(KERN_DEBUG "%s: pcan_usb_plugin(0x%04x, 0x%04x)\n", DEVICE_NAME, 
           usb_dev->descriptor.idVendor, usb_dev->descriptor.idProduct);
 
-  if ((usb_dev->descriptor.idVendor  == PCAN_USB_VENDOR_ID)  && 
-      (usb_dev->descriptor.idProduct == PCAN_USB_PRODUCT_ID))
+  // take the 1st configuration (it's default)
+  if ((err = usb_reset_configuration (usb_dev)) < 0) 
   {
-    // take the 1st configuration (it's default)
-    if ((err = usb_reset_configuration (usb_dev)) < 0) 
-    {
-      printk(KERN_ERR "%s: usb_set_configuration() failed!\n", DEVICE_NAME);
-      goto reject;
-    }
-    
-    // only 1 interface is supported
-    if ((err = usb_set_interface (usb_dev, 0, 0)) < 0) 
-    {
-      printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
-      goto reject;
-    }
-    
-    // allocate memory for my device
-    if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
-    {
-      printk(KERN_ERR "%s: pcan_usb_plugin - memory allocation failed!\n", DEVICE_NAME);
-      err = -ENOMEM;
-      goto reject;
-    }
-    memset(dev, 0x00, sizeof(*dev));
-
-    dev->wInitStep = 0;
-
-    u   = &dev->port.usb;
-
-    // init structure elements to defaults
-    pcan_soft_init(dev, "usb", HW_USB);
-
-    // preset finish flags
-    atomic_set(&u->param_xmit_finished, 0);
-
-    // preset active URB counter
-    atomic_set(&u->active_urbs, 0);
-  
-    // override standard device access functions
-    dev->device_open      = pcan_usb_device_open;
-    dev->device_release   = pcan_usb_device_release;
-    dev->device_write     = pcan_usb_device_write;
-    #ifdef NETDEV_SUPPORT
-    dev->netdevice_write  = pcan_usb_device_write_frame;
-    #endif
-
-    // init process wait queues
-    init_waitqueue_head(&dev->read_queue);
-    init_waitqueue_head(&dev->write_queue);
-
-    // set this before any instructions, fill struct pcandev, part 1  
-    dev->wInitStep   = 0;           
-    dev->readreg     = NULL;
-    dev->writereg    = NULL;
-    dev->cleanup     = pcan_usb_cleanup;
-    dev->req_irq     = pcan_usb_req_irq;
-    dev->free_irq    = pcan_usb_free_irq;
-    dev->open        = pcan_usb_open;
-    dev->release     = pcan_usb_release;
-    dev->filter      = pcan_create_filter_chain();
-
-    // store pointer to kernel supplied usb_dev
-    u->usb_dev          = usb_dev;
-    u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
-    u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice >> 8);
-    u->pUSBtime         = NULL;
-
-    printk(KERN_INFO "%s: usb hardware revision = %d\n", DEVICE_NAME, u->ucRevision);
-
-    // get endpoint addresses (numbers) and associated max data length (only from setting 0)
-    iface_desc = &interface->altsetting[0];
-    for (i = 0; i < iface_desc->desc.bNumEndpoints; i++)
-    {
-      endpoint = &iface_desc->endpoint[i].desc;
-      
-      u->Endpoint[i].ucNumber = endpoint->bEndpointAddress;
-      u->Endpoint[i].wDataSz  = endpoint->wMaxPacketSize;
-    }
-
-    init_waitqueue_head(&u->usb_wait_queue);
-
-    dev->wInitStep = 1;
-
-    // add into list of devices
-    list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list        
-    dev->wInitStep = 2;
-    
-    // assign the device as plugged in
-    dev->ucPhysicallyInstalled = 1;
-
-    pcan_drv.wDeviceCount++;
-    usb_devices++; 
-    dev->wInitStep = 3;
-    
-    if ((err = pcan_usb_allocate_resources(dev)))
-      goto reject;
-
-    dev->wInitStep = 4;
-
-    usb_set_intfdata(interface, dev);
-    if ((err = usb_register_dev(interface, &pcan_class)) < 0)
-    {
-      usb_set_intfdata(interface, NULL);
-      goto reject;
-    }
-    
-    dev->nMinor = interface->minor;
-    
-    // get serial number early
-    pcan_usb_getSerialNumber(dev);
-    
-    #ifdef NETDEV_SUPPORT
-    pcan_netdev_register(dev);
-    #endif
-    
-    printk(KERN_INFO "%s: usb device minor %d found\n", DEVICE_NAME, dev->nMinor);
-
-    return 0;
-
-    reject:
-    pcan_usb_cleanup(dev);
-    
-    printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
+    printk(KERN_ERR "%s: usb_set_configuration() failed!\n", DEVICE_NAME);
+    goto reject;
   }
+    
+  // only 1 interface is supported
+  if ((err = usb_set_interface (usb_dev, 0, 0)) < 0) 
+  {
+    printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
+    goto reject;
+  }
+  
+  // allocate memory for my device
+  if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
+  {
+    printk(KERN_ERR "%s: pcan_usb_plugin - memory allocation failed!\n", DEVICE_NAME);
+    err = -ENOMEM;
+    goto reject;
+  }
+  memset(dev, 0x00, sizeof(*dev));
+
+  dev->wInitStep = 0;
+
+  u   = &dev->port.usb;
+
+  // init structure elements to defaults
+  pcan_soft_init(dev, "usb", HW_USB);
+
+  // preset finish flags
+  atomic_set(&u->param_xmit_finished, 0);
+
+  // preset active URB counter
+  atomic_set(&u->active_urbs, 0);
+
+  // override standard device access functions
+  dev->device_open      = pcan_usb_device_open;
+  dev->device_release   = pcan_usb_device_release;
+  dev->device_write     = pcan_usb_device_write;
+  #ifdef NETDEV_SUPPORT
+  dev->netdevice_write  = pcan_usb_device_write_frame;
+  #endif
+
+  // init process wait queues
+  init_waitqueue_head(&dev->read_queue);
+  init_waitqueue_head(&dev->write_queue);
+
+  // set this before any instructions, fill struct pcandev, part 1  
+  dev->wInitStep   = 0;           
+  dev->readreg     = NULL;
+  dev->writereg    = NULL;
+  dev->cleanup     = pcan_usb_cleanup;
+  dev->req_irq     = pcan_usb_req_irq;
+  dev->free_irq    = pcan_usb_free_irq;
+  dev->open        = pcan_usb_open;
+  dev->release     = pcan_usb_release;
+  dev->filter      = pcan_create_filter_chain();
+
+  // store pointer to kernel supplied usb_dev
+  u->usb_dev          = usb_dev;
+  u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
+  u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice >> 8);
+  u->pUSBtime         = NULL;
+
+  printk(KERN_INFO "%s: usb hardware revision = %d\n", DEVICE_NAME, u->ucRevision);
+
+  // get endpoint addresses (numbers) and associated max data length (only from setting 0)
+  iface_desc = &interface->altsetting[0];
+  for (i = 0; i < iface_desc->desc.bNumEndpoints; i++)
+  {
+    endpoint = &iface_desc->endpoint[i].desc;
+    
+    u->Endpoint[i].ucNumber = endpoint->bEndpointAddress;
+    u->Endpoint[i].wDataSz  = endpoint->wMaxPacketSize;
+  }
+
+  init_waitqueue_head(&u->usb_wait_queue);
+
+  dev->wInitStep = 1;
+
+  // add into list of devices
+  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list        
+  dev->wInitStep = 2;
+  
+  // assign the device as plugged in
+  dev->ucPhysicallyInstalled = 1;
+
+  pcan_drv.wDeviceCount++;
+  usb_devices++; 
+  dev->wInitStep = 3;
+  
+  if ((err = pcan_usb_allocate_resources(dev)))
+    goto reject;
+
+  dev->wInitStep = 4;
+
+  usb_set_intfdata(interface, dev);
+  if ((err = usb_register_dev(interface, &pcan_class)) < 0)
+  {
+    usb_set_intfdata(interface, NULL);
+    goto reject;
+  }
+  
+  dev->nMinor = interface->minor;
+  
+  // get serial number early
+  pcan_usb_getSerialNumber(dev);
+  
+  #ifdef NETDEV_SUPPORT
+  pcan_netdev_register(dev);
+  #endif
+  
+  printk(KERN_INFO "%s: usb device minor %d found\n", DEVICE_NAME, dev->nMinor);
+
+  return 0;
+
+  reject:
+  pcan_usb_cleanup(dev);
+  
+  printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
   
   return err;
 }
@@ -883,117 +879,113 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
   DPRINTK(KERN_DEBUG "%s: pcan_usb_plugin(0x%04x, 0x%04x, %d)\n", DEVICE_NAME,
           usb_dev->descriptor.idVendor, usb_dev->descriptor.idProduct, interface);
 
-  if ((usb_dev->descriptor.idVendor  == PCAN_USB_VENDOR_ID)  &&
-      (usb_dev->descriptor.idProduct == PCAN_USB_PRODUCT_ID))
+  // take the 1st configuration (it's default)
+  if (usb_set_configuration (usb_dev, usb_dev->config[0].bConfigurationValue) < 0)
   {
-    // take the 1st configuration (it's default)
-    if (usb_set_configuration (usb_dev, usb_dev->config[0].bConfigurationValue) < 0)
-    {
-      printk(KERN_ERR "%s: usb_set_configuration() failed!\n", DEVICE_NAME);
-      goto reject;
-    }
-
-    // only 1 interface is supported
-    if (usb_set_interface (usb_dev, 0, 0) < 0)
-    {
-      printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
-      goto reject;
-    }
-    
-    // allocate memory for my device
-    if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
-    {
-      printk(KERN_ERR "%s: pcan_usb_plugin - memory allocation failed!\n", DEVICE_NAME);
-      goto reject;
-    }
-
-    dev->wInitStep = 0;
-
-    u   = &dev->port.usb;
-
-    // init structure elements to defaults
-    pcan_soft_init(dev, "usb", HW_USB);
-
-    // preset finish flags
-    atomic_set(&u->param_xmit_finished, 0);
-
-    // preset active URB counter
-    atomic_set(&u->active_urbs, 0);
-
-    // override standard device access functions
-    dev->device_open      = pcan_usb_device_open;
-    dev->device_release   = pcan_usb_device_release;
-    dev->device_write     = pcan_usb_device_write;
-    #ifdef NETDEV_SUPPORT
-    dev->netdevice_write  = pcan_usb_device_write_frame;
-    #endif
-
-    // init process wait queues
-    init_waitqueue_head(&dev->read_queue);
-    init_waitqueue_head(&dev->write_queue);
-
-    // set this before any instructions, fill struct pcandev, part 1
-    dev->wInitStep   = 0;           
-    dev->readreg     = NULL;
-    dev->writereg    = NULL;
-    dev->cleanup     = pcan_usb_cleanup;
-    dev->req_irq     = pcan_usb_req_irq;
-    dev->free_irq    = pcan_usb_free_irq;
-    dev->open        = pcan_usb_open;
-    dev->release     = pcan_usb_release;
-
-    if ((err = assignMinorNumber(dev)))
-      goto reject;
-
-    // store pointer to kernel supplied usb_dev
-    u->usb_dev          = usb_dev;
-    u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
-    u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice >> 8);
-    u->pUSBtime         = NULL;
-
-    printk(KERN_INFO "%s: usb hardware revision = %d\n", DEVICE_NAME, u->ucRevision);
-
-    // get endpoint addresses (numbers) and associated max data length
-    current_interface_setting = &usb_dev->actconfig->interface->altsetting[usb_dev->actconfig->interface->act_altsetting];
-    for (i = 0; i < 4; i++)
-    {
-      u->Endpoint[i].ucNumber = current_interface_setting->endpoint[i].bEndpointAddress;
-      u->Endpoint[i].wDataSz  = current_interface_setting->endpoint[i].wMaxPacketSize;
-    }
-
-    init_waitqueue_head(&u->usb_wait_queue);
-
-    dev->wInitStep = 1;
-
-    // add into list of devices
-    list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
-    dev->wInitStep = 2;
-
-    // assign the device as plugged in
-    dev->ucPhysicallyInstalled = 1;
-
-    pcan_drv.wDeviceCount++;
-    usb_devices++; 
-    dev->wInitStep = 3;
-
-    if ((err = pcan_usb_allocate_resources(dev)))
-      goto reject;
-
-    dev->wInitStep = 4;
-
-    printk(KERN_INFO "%s: usb device minor %d found\n", DEVICE_NAME, dev->nMinor);
-
-    #ifdef NETDEV_SUPPORT
-    pcan_netdev_register(dev);
-    #endif
-
-    return (void *)dev;
-
-    reject:
-    pcan_usb_cleanup(dev);
-    
-    printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
+    printk(KERN_ERR "%s: usb_set_configuration() failed!\n", DEVICE_NAME);
+    goto reject;
   }
+
+  // only 1 interface is supported
+  if (usb_set_interface (usb_dev, 0, 0) < 0)
+  {
+    printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
+    goto reject;
+  }
+  
+  // allocate memory for my device
+  if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
+  {
+    printk(KERN_ERR "%s: pcan_usb_plugin - memory allocation failed!\n", DEVICE_NAME);
+    goto reject;
+  }
+
+  dev->wInitStep = 0;
+
+  u   = &dev->port.usb;
+
+  // init structure elements to defaults
+  pcan_soft_init(dev, "usb", HW_USB);
+
+  // preset finish flags
+  atomic_set(&u->param_xmit_finished, 0);
+
+  // preset active URB counter
+  atomic_set(&u->active_urbs, 0);
+
+  // override standard device access functions
+  dev->device_open      = pcan_usb_device_open;
+  dev->device_release   = pcan_usb_device_release;
+  dev->device_write     = pcan_usb_device_write;
+  #ifdef NETDEV_SUPPORT
+  dev->netdevice_write  = pcan_usb_device_write_frame;
+  #endif
+
+  // init process wait queues
+  init_waitqueue_head(&dev->read_queue);
+  init_waitqueue_head(&dev->write_queue);
+
+  // set this before any instructions, fill struct pcandev, part 1
+  dev->wInitStep   = 0;           
+  dev->readreg     = NULL;
+  dev->writereg    = NULL;
+  dev->cleanup     = pcan_usb_cleanup;
+  dev->req_irq     = pcan_usb_req_irq;
+  dev->free_irq    = pcan_usb_free_irq;
+  dev->open        = pcan_usb_open;
+  dev->release     = pcan_usb_release;
+
+  if ((err = assignMinorNumber(dev)))
+    goto reject;
+
+  // store pointer to kernel supplied usb_dev
+  u->usb_dev          = usb_dev;
+  u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
+  u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice >> 8);
+  u->pUSBtime         = NULL;
+
+  printk(KERN_INFO "%s: usb hardware revision = %d\n", DEVICE_NAME, u->ucRevision);
+
+  // get endpoint addresses (numbers) and associated max data length
+  current_interface_setting = &usb_dev->actconfig->interface->altsetting[usb_dev->actconfig->interface->act_altsetting];
+  for (i = 0; i < 4; i++)
+  {
+    u->Endpoint[i].ucNumber = current_interface_setting->endpoint[i].bEndpointAddress;
+    u->Endpoint[i].wDataSz  = current_interface_setting->endpoint[i].wMaxPacketSize;
+  }
+
+  init_waitqueue_head(&u->usb_wait_queue);
+
+  dev->wInitStep = 1;
+
+  // add into list of devices
+  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
+  dev->wInitStep = 2;
+
+  // assign the device as plugged in
+  dev->ucPhysicallyInstalled = 1;
+
+  pcan_drv.wDeviceCount++;
+  usb_devices++; 
+  dev->wInitStep = 3;
+
+  if ((err = pcan_usb_allocate_resources(dev)))
+    goto reject;
+
+  dev->wInitStep = 4;
+
+  printk(KERN_INFO "%s: usb device minor %d found\n", DEVICE_NAME, dev->nMinor);
+
+  #ifdef NETDEV_SUPPORT
+  pcan_netdev_register(dev);
+  #endif
+
+  return (void *)dev;
+
+  reject:
+  pcan_usb_cleanup(dev);
+  
+  printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
 
   return NULL;
 }

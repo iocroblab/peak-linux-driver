@@ -26,7 +26,7 @@
 //
 // pcan_netdev.h - CAN network device support defines / prototypes
 //
-// $Id: pcan_netdev.h 478 2007-03-05 19:35:27Z ohartkopp $
+// $Id: pcan_netdev.h 524 2007-10-16 13:11:15Z ohartkopp $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>
@@ -50,7 +50,9 @@
 
 struct can_priv
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
   struct net_device_stats stats; /* standard netdev statistics */
+#endif
   struct pcandev          *pdev; /* back reference to PCAN device */
 };
 

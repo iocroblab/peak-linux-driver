@@ -25,7 +25,7 @@
 #
 # Makefile - Makefile for the shared library libpcan.so.x.x
 #
-# $Id: Makefile 502 2007-05-02 13:43:14Z edouard $
+# $Id: Makefile 517 2007-07-09 09:40:42Z edouard $
 #
 #****************************************************************************
 
@@ -33,7 +33,7 @@ SRC     = src
 INC     = -I. -I../driver
 FILES   = $(SRC)/libpcan.c
 DBG     = -g
-RT      = NO_XENOMAI
+RT      = NO_RT
 
 ifeq ($(RT), XENOMAI)
 #****************************************************************************
@@ -45,10 +45,26 @@ PCC = NO_PCCARD_SUPPORT
 INC     = -I. -I../driver -I/usr/xenomai/include
 
 SKIN = xeno
-XENO_DIR          ?= /usr/xenomai
-XENO_CONFIG       ?= $(XENO_DIR)/bin/xeno-config
-XENO_LIB_DIR      ?= $(shell $(XENO_CONFIG) --library-dir) -Wl,-rpath $(shell $(XENO_CONFIG) --library-dir)
-XENO_CFLAGS       ?= $(shell $(XENO_CONFIG) --$(SKIN)-cflags)
+RT_DIR          ?= /usr/xenomai
+RT_CONFIG       ?= $(RT_DIR)/bin/xeno-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir) -Wl,-rpath $(shell $(RT_CONFIG) --library-dir)
+RT_CFLAGS       ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
+endif
+
+ifeq ($(RT), RTAI)
+#****************************************************************************
+# Define flags for RTAI installation only
+#
+USB = NO_USB_SUPPORT
+PCC = NO_PCCARD_SUPPORT
+
+INC     = -I. -I../driver -I/usr/realtime/include
+
+SKIN = lxrt
+RT_DIR          ?= /usr/realtime
+RT_CONFIG       ?= $(RT_DIR)/bin/rtai-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir) -Wl,-rpath $(shell $(RT_CONFIG) --library-dir)
+RT_CFLAGS       ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
 endif
 
 ifeq ($(HOSTTYPE),x86_64)
@@ -61,10 +77,10 @@ LDNAME  = libpcan.so
 SONAME  = $(LDNAME).0
 TARGET  = $(SONAME).6
 
-ifeq ($(RT), XENOMAI)
-  CFLAGS = -fPIC -shared -O2 -Wall -Wl,-soname,$(SONAME) -lc $(INC) -D$(RT) $(XENO_CFLAGS) -L$(XENO_LIB_DIR) -lrtdm
+ifneq ($(RT), NO_RT)
+  CFLAGS = -fPIC -shared -O2 -Wall -Wl,-soname,$(SONAME) -lc $(INC) -D$(RT) $(RT_CFLAGS) -L$(RT_LIB_DIR) -lrtdm
 else
-  CFLAGS = -fPIC -shared -O2 -Wall -Wl,-soname,$(SONAME) -lc $(INC)
+  CFLAGS = -fPIC -shared -O2 -Wall -Wl,-soname,$(SONAME) -lc $(INC) -D$(RT)
 endif
 
 all:    $(TARGET)

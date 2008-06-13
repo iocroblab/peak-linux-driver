@@ -32,7 +32,7 @@
 //
 // all parts of the isa hardware for pcan-isa devices
 //
-// $Id: pcan_isa.c 504 2007-05-10 19:52:13Z khitschler $
+// $Id: pcan_isa.c 518 2007-08-08 07:40:31Z edouard $
 //
 //****************************************************************************
 
@@ -64,7 +64,13 @@ static u8  isa_irqs[]  = {10, 5};
 static u16 isa_devices = 0;        // the number of accepted isa_devices
 
 //****************************************************************************
-// CODE  
+// CODE
+#ifdef NO_RT
+  #include "pcan_isa_linux.c"
+#else
+  #include "pcan_isa_rt.c"
+#endif
+
 static u8 pcan_isa_readreg(struct pcandev *dev, u8 port) // read a register
 {
   return inb(dev->port.isa.dwPort + port);
@@ -73,167 +79,6 @@ static u8 pcan_isa_readreg(struct pcandev *dev, u8 port) // read a register
 static void pcan_isa_writereg(struct pcandev *dev, u8 port, u8 data) // write a register
 {
   outb(data, dev->port.isa.dwPort + port);
-}
-
-#ifndef XENOMAI
-//----------------------------------------------------------------------------
-// init shared interrupt linked lists
-static inline void init_same_irq_list(struct pcandev *dev)
-{
-  DPRINTK(KERN_DEBUG "%s: init_same_irq_list(%p)\n", DEVICE_NAME, dev);
-  
-  INIT_LIST_HEAD(&dev->port.isa.anchor.same_irq_items); // init to no content
-  dev->port.isa.anchor.same_irq_count  = 0;             // no element in list
-  dev->port.isa.anchor.same_irq_active = 0;             // no active element
-  dev->port.isa.same.dev               = dev;           // points to me
-  dev->port.isa.my_anchor              = NULL;          // point to nowhere
-}  
-
-//----------------------------------------------------------------------------
-// create lists of devices with the same irq - base for shared irq handling
-void pcan_create_isa_shared_irq_lists(void)
-{
-  struct pcandev *outer_dev;
-  struct pcandev *inner_dev;
-  struct list_head *outer_ptr, *inner_ptr;
-  
-  DPRINTK(KERN_DEBUG "%s: pcan_create_isa_shared_irq_lists()\n", DEVICE_NAME);
-  
-  // loop over all devices for a ISA port with same irq level and not myself
-  for (outer_ptr = pcan_drv.devices.next; outer_ptr != &pcan_drv.devices; outer_ptr = outer_ptr->next)
-  {
-    outer_dev = (struct pcandev *)outer_ptr;  
-    
-    // if it is a ISA device and still not associated
-    if ((outer_dev->wType == HW_ISA_SJA) && (outer_dev->port.isa.my_anchor == NULL))
-    {
-      outer_dev->port.isa.my_anchor = &outer_dev->port.isa.anchor; // then it is the root of a new list
-      outer_dev->port.isa.my_anchor->same_irq_count++;             // I'm the first and - maybe - the only one
-      list_add_tail(&outer_dev->port.isa.same.item, &outer_dev->port.isa.my_anchor->same_irq_items); // add to list
-      
-      DPRINTK(KERN_DEBUG "%s: main Irq=%d, dev=%p, count=%d\n", DEVICE_NAME, 
-                         outer_dev->port.isa.wIrq, outer_dev, outer_dev->port.isa.my_anchor->same_irq_count);
-          
-      // now search for other devices with the same irq
-      for (inner_ptr = outer_ptr->next; inner_ptr != &pcan_drv.devices; inner_ptr = inner_ptr->next)
-      {
-        inner_dev = (struct pcandev *)inner_ptr;  
-  
-        // if it is a ISA device and the irq level is the same and it is still not associated
-        if ((inner_dev->wType == HW_ISA_SJA) && (inner_dev->port.isa.my_anchor == NULL) && (inner_dev->port.isa.wIrq == outer_dev->port.isa.wIrq))
-        {
-          inner_dev->port.isa.my_anchor = outer_dev->port.isa.my_anchor; // point and associate to the first with the same irq level
-          inner_dev->port.isa.my_anchor->same_irq_count++;               // no - there are more
-          list_add_tail(&inner_dev->port.isa.same.item, &inner_dev->port.isa.my_anchor->same_irq_items); // add to list
-          
-          DPRINTK(KERN_DEBUG "%s: sub  Irq=%d, dev=%p, count=%d\n", DEVICE_NAME, 
-                             inner_dev->port.isa.wIrq, inner_dev, inner_dev->port.isa.my_anchor->same_irq_count);        
-        }
-      }
-    }
-  }
-}
-
-//----------------------------------------------------------------------------
-// only one irq-handler per irq level for ISA shared interrupts
-static irqreturn_t IRQHANDLER(pcan_isa_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
-{
-  // loop the list of irq-handlers for all devices with the same 
-  // irq-level until at least all devices are one time idle.
-  
-  SAME_IRQ_LIST *my_anchor = (SAME_IRQ_LIST *)dev_id;
-  struct list_head *ptr;
-  struct pcandev *dev;
-  int ret        = 0;
-  u16 loop_count = 0;
-  u16 stop_count = 100;
-
-  // DPRINTK(KERN_DEBUG "%s: pcan_isa_irqhandler(%p)\n", DEVICE_NAME, my_anchor);
-  
-  // loop over all ISA devices with same irq level
-  for (ptr = my_anchor->same_irq_items.next; loop_count < my_anchor->same_irq_count; ptr = ptr->next)
-  {
-    if (ptr != &my_anchor->same_irq_items)
-    {
-      dev = ((SAME_IRQ_ITEM *)ptr)->dev;
-      
-      // DPRINTK(KERN_DEBUG "%s: dev=%p\n", DEVICE_NAME, dev);
-      
-      if (!IRQHANDLER(sja1000_base_irqhandler, irq, dev, regs))
-        loop_count++;
-      else
-      {
-        ret = 1;
-        loop_count = 0; // reset, I need at least my_anchor->same_irq_count loops without a pending request
-      }
-        
-      if (!stop_count--)
-      {
-        printk(KERN_ERR "%s: Too much ISA interrupt load, processing halted!\n", DEVICE_NAME);        
-        break;
-      }
-    }
-  }
-  
-  return PCAN_IRQ_RETVAL(ret);
-}
-#endif
-
-#ifdef XENOMAI
-static int pcan_isa_req_irq(struct rtdm_dev_context *context)
-{
-  struct pcanctx_rt *ctx;
-  struct pcandev *dev = (struct pcandev *)NULL;
-#else
-static int pcan_isa_req_irq(struct pcandev *dev)
-{
-#endif
-  int err;
-  
-  DPRINTK(KERN_DEBUG "%s: pcan_isa_req_irq(%p)\n", DEVICE_NAME, dev);
-  
-#ifdef XENOMAI
-  ctx = (struct pcanctx_rt *)context->dev_private;
-  dev = ctx->dev;
-#endif
-  
-  if (dev->wInitStep == 3) // init has finished completly 
-  {
-    #ifdef XENOMAI
-    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, sja1000_irqhandler_rt,
-            0, context->device->proc_name, ctx)))
-      return err;
-    #else    
-    if (!dev->port.isa.my_anchor->same_irq_active) // the first device
-    {
-      if ((err = request_irq(dev->port.isa.wIrq, pcan_isa_irqhandler, SA_INTERRUPT, "pcan", dev->port.isa.my_anchor)))
-        return err;
-    }
-    
-    dev->port.isa.my_anchor->same_irq_active++;  // count all ISA devices with same irq
-    #endif
-  
-    dev->wInitStep++;
-  }
-    
-  return 0;
-}
-
-static void pcan_isa_free_irq(struct pcandev *dev)
-{
-  DPRINTK(KERN_DEBUG "%s: pcan_isa_free_irq(%p)\n", DEVICE_NAME, dev);
-  
-  if (dev->wInitStep == 4) // irq was installed
-  {
-    #ifndef XENOMAI
-    dev->port.isa.my_anchor->same_irq_active--;
-    
-    if (!dev->port.isa.my_anchor->same_irq_active) // the last device
-      free_irq(dev->port.isa.wIrq, dev->port.isa.my_anchor); 
-      
-    #endif
-    dev->wInitStep--;
-  }
 }
 
 // release and probe function
@@ -317,10 +162,9 @@ static int  pcan_isa_init(struct pcandev *dev, u32 dwPort, u16 wIrq)
   dev->wInitStep = 1;
   
   dev->wInitStep = 2; 
-#ifndef XENOMAI  
-  // addition to handle interrupt sharing
-  init_same_irq_list(dev);
-#endif  
+  
+  INIT_SAME_IRQ_LIST();
+  
   isa_devices++; 
   dev->wInitStep = 3;
   
@@ -379,4 +223,3 @@ int pcan_create_isa_devices(char* type, u32 io, u16 irq)
 
   return result;
 }
-

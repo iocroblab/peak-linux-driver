@@ -25,28 +25,41 @@
 #
 # Makefile - Makefile for receivetest and transmittest programs
 #
-# $Id: Makefile 502 2007-05-02 13:43:14Z edouard $
+# $Id: Makefile 518 2007-08-08 07:40:31Z edouard $
 #
 #****************************************************************************
 
 SRC     = src
 INC     = -I. -I../lib -I../driver
-RT      = NO_XENOMAI
+RT      = NO_RT
+
 
 ifeq ($(RT), XENOMAI)
 SKIN = xeno
-
 ### Xenomai directory, xeno-config and library directory ###########
-XENO_DIR          ?= /usr/xenomai
-XENO_CONFIG       ?= $(XENO_DIR)/bin/xeno-config
-XENO_LIB_DIR      ?= $(shell $(XENO_CONFIG) --library-dir) -Wl,-rpath $(shell $(XENO_CONFIG) --library-dir)
-
+RT_DIR          ?= /usr/xenomai
+RT_CONFIG       ?= $(RT_DIR)/bin/xeno-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir) -Wl,-rpath $(shell $(RT_CONFIG) --library-dir)
 ### User space application compile options #########################
 USERAPP_LIBS      ?= -lnative -lpcan
-USERAPP_LDFLAGS   ?= $(shell $(XENO_CONFIG) --$(SKIN)-ldflags) -L$(XENO_LIB_DIR)
-USERAPP_CFLAGS    ?= $(shell $(XENO_CONFIG) --$(SKIN)-cflags)
-else
-USERAPP_LIBS = -lpcan
+USERAPP_LDFLAGS   ?= $(shell $(RT_CONFIG) --$(SKIN)-ldflags) -L$(RT_LIB_DIR)
+USERAPP_CFLAGS    ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
+endif
+
+ifeq ($(RT), RTAI)
+SKIN = lxrt
+### Rtai directory, rtai-config and library directory ###########
+RT_DIR          ?= /usr/realtime
+RT_CONFIG       ?= $(RT_DIR)/bin/rtai-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir) -Wl,-rpath $(shell $(RT_CONFIG) --library-dir)
+### User space application compile options #########################
+USERAPP_LIBS      ?= -llxrt -lpcan
+USERAPP_LDFLAGS   ?= $(shell $(RT_CONFIG) --$(SKIN)-ldflags) -L$(RT_LIB_DIR)
+USERAPP_CFLAGS    ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
+endif
+
+ifeq ($(RT), NO_RT)
+  USERAPP_LIBS = -lpcan
 endif
 
 ifeq ($(HOSTTYPE),x86_64)
@@ -55,7 +68,7 @@ else
   LDLIBS  = -L../lib -L/lib -L/usr/lib -L/usr/local/lib
 endif
 
-ifeq ($(RT), XENOMAI)
+ifneq ($(RT), NO_RT)
 DBGFLAGS   =
 else
 DBGFLAGS   = -g
@@ -66,6 +79,7 @@ CFLAGS  = $(DBGFLAGS) $(INC) $(LDLIBS)
 else
 CFLAGS  = $(INC) $(LDLIBS)
 endif
+
 
 TARGET1 = receivetest
 FILES1  = $(SRC)/$(TARGET1).c $(SRC)/common.c
