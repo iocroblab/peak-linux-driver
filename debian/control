@@ -2,10 +2,10 @@ Source: peak-linux-driver
 Section: net
 Priority: extra
 Maintainer: Teemu Ikonen <tpikonen@gmail.com>
-Build-Depends: debhelper (>= 5.0.42)
+Build-Depends: debhelper (>= 6)
 Build-Depends-Indep: debconf-utils
 Homepage: http://www.peak-system.com/linux/
-Standards-Version: 3.7.2
+Standards-Version: 3.7.3
 
 Package: libpcan-dev
 Section: libdevel
@@ -28,7 +28,7 @@ Package: peak-linux-driver-source
 Architecture: all
 Depends: module-assistant
 Recommends:  dpkg-dev, kernel-package, debhelper (>= 5.0.42), debconf-utils
-Description: Source for the peak-linux-driver kernel modules.
+Description: Source for the peak-linux-driver kernel modules
  This package provides the driver source code for CAN-bus interface 
  products from PEAK-System. These allow communication with the 
  Controller Area Network through standard PC-buses, such as USB, PCI etc.
