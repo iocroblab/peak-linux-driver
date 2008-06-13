@@ -29,7 +29,7 @@
 // the shared library to unify the interface to the devices
 // PCAN-ISA, PCAN-Dongle, PCAN-PCI, PCAN-PC104, PCAN-USB via their drivers
 //
-// $Id: libpcan.c 463 2007-02-23 06:58:19Z edouard $
+// $Id: libpcan.c 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
@@ -45,7 +45,7 @@
 #include <errno.h>
 #include <libpcan.h>      // the interface to the application
 
-#ifdef XENOMAI
+#ifndef NO_RT
 #include <rtdm/rtdm.h>
 #endif
 
@@ -56,7 +56,7 @@
 #define DEVICE_PATH "/dev/pcan"   // + Minor = real device path
 #define LOCAL_STRING_LEN 64       // length of internal used strings
 
-#ifdef XENOMAI
+#ifndef NO_RT
     #define __ioctl(x, y, z) rt_dev_ioctl(x, y, z)
     #define __close(fp)      rt_dev_close(fp)
 #else
@@ -186,7 +186,7 @@ HANDLE LINUX_CAN_Open(const char *szDeviceName, int nFlag)
   desc->szVersionString[0] = 0;
   desc->szDevicePath[0]    = 0;
     
-#ifdef XENOMAI
+#ifndef NO_RT
   char DeviceName[15];
   sscanf(szDeviceName, "/dev/%s", DeviceName);
   if ((desc->nFileNo = rt_dev_open(DeviceName, nFlag)) == -1)

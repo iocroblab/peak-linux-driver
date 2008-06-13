@@ -24,16 +24,17 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Arnaud Westenberg (arnaud@wanadoo.nl)
 //                Matt Waters (Matt.Waters@dynetics.com)
+//                Benjamin Kolb (Benjamin.Kolb@bigfoot.de)
 //****************************************************************************
 
 //****************************************************************************
 //
 // pcan_sja1000.c - all about sja1000 init and data handling
 //
-// $Id: pcan_sja1000.c 508 2007-05-18 21:54:03Z khitschler $
+// $Id: pcan_sja1000.c 527 2007-11-04 15:02:32Z khitschler $
 //
 //****************************************************************************
 
@@ -165,7 +166,7 @@
 #define OUTPUT_CONTROL_SETUP (OUTPUT_CONTROL_TRANSISTOR_P0 | OUTPUT_CONTROL_TRANSISTOR_N0 | OUTPUT_CONTROL_MODE_1)
 
 // the interrupt enables
-#define INTERRUPT_ENABLE_SETUP (RECEIVE_INTERRUPT_ENABLE | TRANSMIT_INTERRUPT_ENABLE | DATA_OVERRUN_INTERRUPT_ENABLE | BUS_ERROR_INTERRUPT_ENABLE | ERROR_PASSIV_INTERRUPT_ENABLE)
+#define INTERRUPT_ENABLE_SETUP (RECEIVE_INTERRUPT_ENABLE | TRANSMIT_INTERRUPT_ENABLE | DATA_OVERRUN_INTERRUPT_ENABLE | BUS_ERROR_INTERRUPT_ENABLE | ERROR_PASSIV_INTERRUPT_ENABLE | ERROR_WARN_INTERRUPT_ENABLE)
 
 // the maximum number of handled messages in one interrupt 
 #define MAX_MESSAGES_PER_INTERRUPT 8
@@ -185,7 +186,13 @@
 // LOCALS
 
 //****************************************************************************
-// CODE  
+// CODE
+
+#ifdef NO_RT
+  #include "pcan_sja1000_linux.c"
+#else
+  #include "pcan_sja1000_rt.c"
+#endif
 
 //----------------------------------------------------------------------------
 // switches the chip into reset mode
@@ -193,22 +200,22 @@ static int set_reset_mode(struct pcandev *dev)
 {
   u32 dwStart = get_mtime();
   u8  tmp;
-  
+
   tmp = dev->readreg(dev, MODE);
-  while (!(tmp & RESET_MODE) && ((get_mtime() - dwStart) < MODE_REGISTER_SWITCH_TIME)) 
+  while (!(tmp & RESET_MODE) && ((get_mtime() - dwStart) < MODE_REGISTER_SWITCH_TIME))
   {
     dev->writereg(dev, MODE, RESET_MODE); // force into reset mode
     wmb();
     udelay(1);
     //schedule();
     tmp = dev->readreg(dev, MODE);
-  }   
-  
+  }
+
   if (!(tmp & RESET_MODE))
-    return -EIO;  
+    return -EIO;
   else
-    return 0;  
-} 
+    return 0;
+}
 
 //----------------------------------------------------------------------------
 // switches the chip back from reset mode
@@ -216,7 +223,7 @@ static int set_normal_mode(struct pcandev *dev, u8 ucModifier)
 {
   u32 dwStart = get_mtime();
   u8  tmp;
-  
+
   tmp = dev->readreg(dev, MODE);
   while ((tmp != ucModifier) && ((get_mtime() - dwStart) < MODE_REGISTER_SWITCH_TIME))
   {
@@ -225,12 +232,12 @@ static int set_normal_mode(struct pcandev *dev, u8 ucModifier)
     udelay(1);
     //schedule();
     tmp = dev->readreg(dev, MODE);
-  }   
-  
+  }
+
   if (tmp != ucModifier)
-    return -EIO;  
+    return -EIO;
   else
-    return 0;  
+    return 0;
 } 
 
 //----------------------------------------------------------------------------
@@ -242,7 +249,7 @@ static inline void sja1000_irq_enable(struct pcandev *dev)
 
 static inline void sja1000_irq_disable(struct pcandev *dev)
 {
-  dev->writereg(dev, INTERRUPT_ENABLE, 0); 
+  dev->writereg(dev, INTERRUPT_ENABLE, 0);
 }
 
 //----------------------------------------------------------------------------
@@ -251,14 +258,14 @@ static inline u8 clkdivider(struct pcandev *dev)
 {
   if (!dev->props.ucExternalClock)  // crystal based
     return PELICAN_DEFAULT;
-    
+
   // configure clock divider register, switch into pelican mode, depended of of type
   switch (dev->props.ucMasterDevice)
   {
     case CHANNEL_SLAVE:
     case CHANNEL_SINGLE:
       return PELICAN_SINGLE;  // neither a slave nor a single device distribute the clock ...
-    
+
     default:
       return PELICAN_MASTER;  // ... but a master does
   }
@@ -271,66 +278,66 @@ int sja1000_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended, u8 bListenOnly
   int result      = 0;
   u8  _clkdivider = clkdivider(dev);
   u8  ucModifier  = (bListenOnly) ? LISTEN_ONLY_MODE : NORMAL_MODE;
-  
+
   DPRINTK(KERN_DEBUG "%s: sja1000_open(), minor = %d.\n", DEVICE_NAME, dev->nMinor);
-  
+
   // switch to reset 
   result = set_reset_mode(dev);
   if (result)
-    goto fail;    
-    
+    goto fail;
+
   // take a fresh status
   dev->wCANStatus = 0;
-  
+
   // store extended mode (standard still accepted)
   dev->bExtended = bExtended;
-    
+
   // configure clock divider register, switch into pelican mode, depended of of type
   dev->writereg(dev, CLKDIVIDER, _clkdivider);
-  
+
   // configure acceptance code registers
   dev->writereg(dev, ACCEPTANCE_CODE_BASE,     0);
   dev->writereg(dev, ACCEPTANCE_CODE_BASE + 1, 0);
   dev->writereg(dev, ACCEPTANCE_CODE_BASE + 2, 0);
   dev->writereg(dev, ACCEPTANCE_CODE_BASE + 3, 0);
-  
-  // configure all acceptance mask registers to don't care 
+
+  // configure all acceptance mask registers to don't care
   dev->writereg(dev, ACCEPTANCE_MASK_BASE,     0xff);
   dev->writereg(dev, ACCEPTANCE_MASK_BASE + 1, 0xff);
   dev->writereg(dev, ACCEPTANCE_MASK_BASE + 2, 0xff);
   dev->writereg(dev, ACCEPTANCE_MASK_BASE + 3, 0xff);
-  
+
   // configure bus timing registers
   dev->writereg(dev, TIMING0, (u8)((btr0btr1 >> 8) & 0xff));
-  dev->writereg(dev, TIMING1, (u8)((btr0btr1     ) & 0xff));  
-  
+  dev->writereg(dev, TIMING1, (u8)((btr0btr1     ) & 0xff));
+
   // configure output control registers
   dev->writereg(dev, OUTPUT_CONTROL, OUTPUT_CONTROL_SETUP);
-  
+
   // clear any pending interrupt
   dev->readreg(dev, INTERRUPT_STATUS);
-  
+
   // enter normal operating mode
   result = set_normal_mode(dev, ucModifier);
   if (result)
-    goto fail;    
-  
+    goto fail;
+
   // enable CAN interrupts
   sja1000_irq_enable(dev);
-  
+
   fail:
   return result;
 }
 
 //----------------------------------------------------------------------------
 // release CAN-chip
-void sja1000_release(struct pcandev *dev) 
+void sja1000_release(struct pcandev *dev)
 {
   DPRINTK(KERN_DEBUG "%s: sja1000_release()\n", DEVICE_NAME);
-  
+
   // abort pending transmissions
   dev->writereg(dev, COMMAND, ABORT_TRANSMISSION);
-  
+
   // disable CAN interrupts and set chip in reset mode
   sja1000_irq_disable(dev);
   set_reset_mode(dev);
@@ -338,11 +345,7 @@ void sja1000_release(struct pcandev *dev)
 
 //----------------------------------------------------------------------------
 // read CAN-data from chip, supposed a message is available
-#ifdef XENOMAI
-static int sja1000_read_frames(struct pcandev *dev, struct pcanctx_rt *ctx)
-#else
-static int sja1000_read_frames(struct pcandev *dev)
-#endif
+static int sja1000_read_frames(SJA1000_METHOD_ARGS)
 {
   int msgs   = MAX_MESSAGES_PER_INTERRUPT;
   u8 fi;
@@ -356,23 +359,21 @@ static int sja1000_read_frames(struct pcandev *dev)
   int result = 0;
 
   // DPRINTK(KERN_DEBUG "%s: sja1000_read_frames()\n", DEVICE_NAME);
-  
+
   do
   {
-    #ifndef XENOMAI  	
-    do_gettimeofday(&tv); /* create timestamp */
-    #endif
+    DO_GETTIMEOFDAY(tv); /* create timestamp */
 
     fi  = dev->readreg(dev, RECEIVE_FRAME_BASE);
-    dlc = fi & BUFFER_DLC_MASK;    
+    dlc = fi & BUFFER_DLC_MASK;
 
     if (dlc > 8)
       dlc = 8;
-    
+
     if (fi & BUFFER_EFF) {
       /* extended frame format (EFF) */
       dreg = RECEIVE_FRAME_BASE + 5;
-      
+
       #if defined(__LITTLE_ENDIAN)
       localID.uc[3] = dev->readreg(dev, RECEIVE_FRAME_BASE + 1);
       localID.uc[2] = dev->readreg(dev, RECEIVE_FRAME_BASE + 2);
@@ -425,19 +426,12 @@ static int sja1000_read_frames(struct pcandev *dev)
 
     frame.can_dlc = dlc;
 
-#ifdef XENOMAI
-    {
-    rtdm_lockctx_t lockctx;
-    rtdm_lock_get_irqsave(&ctx->in_lock, lockctx);
-#endif
+    SJA1000_LOCK_IRQSAVE(in_lock);
 
     if ((i = pcan_xxxdev_rx(dev, &frame, &tv))) // put into specific data sink
       result = i; // save the last result
 
-#ifdef XENOMAI
-    rtdm_lock_put_irqrestore(&ctx->in_lock, lockctx);
-    }
-#endif
+    SJA1000_UNLOCK_IRQRESTORE(in_lock);
 
     // Any error processing on result =! 0 here?
     // Indeed we have to read from the controller as long as we receive data to
@@ -445,13 +439,13 @@ static int sja1000_read_frames(struct pcandev *dev)
     // the receive queues, this cannot be handled inside the interrupt.
 
     // release the receive buffer
-    dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);  
+    dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);
     wmb();
-    
+
     // give time to settle
     udelay(1);
 
-  } while (dev->readreg(dev, CHIPSTATUS) & RECEIVE_BUFFER_STATUS && (msgs--));  
+  } while (dev->readreg(dev, CHIPSTATUS) & RECEIVE_BUFFER_STATUS && (msgs--));
 
   return result;
 }
@@ -502,7 +496,7 @@ int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
     dreg = TRANSMIT_FRAME_BASE + 3;
 
     localID.ul   <<= 21;
-  
+
     #if defined(__LITTLE_ENDIAN)
     dev->writereg(dev, TRANSMIT_FRAME_BASE + 1, localID.uc[3]);
     dev->writereg(dev, TRANSMIT_FRAME_BASE + 2, localID.uc[2]);
@@ -524,45 +518,36 @@ int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
   dev->writereg(dev, TRANSMIT_FRAME_BASE, fi);
 
   // request a transmission
-  dev->writereg(dev, COMMAND, TRANSMISSION_REQUEST); 
-  wmb(); 
+  dev->writereg(dev, COMMAND, TRANSMISSION_REQUEST);
+  wmb();
 
   // strange hack to get write stall managed
   if ((dev->readreg(dev, CHIPSTATUS) & TRANS_COMPLETE_STATUS))
   {
-    printk(KERN_ERR "%s: Transmission finished early..., minor=%d\n", DEVICE_NAME, dev->nMinor);
+    DPRINTK(KERN_ERR "%s: Transmission finished early..., minor=%d\n", DEVICE_NAME, dev->nMinor);
   }
-  
+
   return 0;
 }
 
 //----------------------------------------------------------------------------
 // write CAN-data from FIFO to chip 
-#ifdef XENOMAI
-int sja1000_write(struct pcandev *dev, struct pcanctx_rt *ctx) 
-#else
-int sja1000_write(struct pcandev *dev) 
-#endif
+int sja1000_write(SJA1000_METHOD_ARGS)
 {
   int        result;
   TPCANMsg   msg;
   struct can_frame cf;
 
   // DPRINTK(KERN_DEBUG "%s: sja1000_write() %d\n", DEVICE_NAME, dev->writeFifo.nStored);
-  
-#ifdef XENOMAI
-  rtdm_lockctx_t lockctx;
-  rtdm_lock_get_irqsave(&ctx->out_lock, lockctx);
-#endif
+
+  SJA1000_LOCK_IRQSAVE(out_lock);
 
   // get a fifo element and step forward
   result = pcan_fifo_get(&dev->writeFifo, &msg);
 
-#ifdef XENOMAI
-  if(result == -ENODATA)
-    rtdm_event_signal(&ctx->empty_event);
-  rtdm_lock_put_irqrestore(&ctx->out_lock, lockctx);
-#endif
+  SJA1000_WAKEUP_EMPTY();
+
+  SJA1000_UNLOCK_IRQRESTORE(out_lock);
 
   if (result)
     return result;
@@ -578,70 +563,49 @@ int sja1000_write(struct pcandev *dev)
 
 //----------------------------------------------------------------------------
 // handle a interrupt request
-#ifdef XENOMAI
-int sja1000_irqhandler_rt(rtdm_irq_t *irq_context)
+int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
 {
-  struct pcanctx_rt *ctx;
-  struct pcandev *dev;
-  int ret = RTDM_IRQ_NONE;
-  rtdm_lockctx_t lockctx;
-#else
-int IRQHANDLER(sja1000_base_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
-{
-  register struct pcandev *dev = (struct pcandev *)dev_id;
-  int ret = 0;
-#endif
-  u8 status;
+  int ret = SJA1000_IRQ_NONE;
+  u8 irqstatus;
   int err;
   u16 rwakeup = 0;
   u16 wwakeup = 0;
   int j = MAX_INTERRUPTS_PER_ENTRY;
-  struct can_frame ef; 
-  
+  struct can_frame ef;
+
   memset(&ef, 0, sizeof(ef));
 
   // DPRINTK(KERN_DEBUG "%s: sja1000_base_irqhandler|sja1000_irqhandler_rt()\n", DEVICE_NAME);
-  
-#ifdef XENOMAI
-  ctx = rtdm_irq_get_arg(irq_context, struct pcanctx_rt);
 
-  dev = ctx->dev;
+  SJA1000_LOCK_IRQSAVE(sja_lock);
 
-  rtdm_lock_get_irqsave(&ctx->sja_lock, lockctx);
-
-#endif
-
-  while ((j--) && (status = dev->readreg(dev, INTERRUPT_STATUS)))
+  while ((j--) && (irqstatus = dev->readreg(dev, INTERRUPT_STATUS)))
   {
-    // DPRINTK(KERN_DEBUG "%s: sja1000_[base_irqhandler|irqhandler_rt](0x%02x)\n", DEVICE_NAME, status);
-  
+    // DPRINTK(KERN_DEBUG "%s: sja1000_[base_irqhandler|irqhandler_rt](0x%02x)\n", DEVICE_NAME, irqstatus);
+
     dev->dwInterruptCounter++;
     err = 0;
 
     // quick hack to badly workaround write stall
-    // if ((status & TRANSMIT_INTERRUPT) || (!atomic_read(&dev->DataSendReady) && !pcan_fifo_empty(&dev->writeFifo) && (dev->readreg(dev, CHIPSTATUS) & TRANS_BUFFER_STATUS)))
-    if (status & TRANSMIT_INTERRUPT) 
+    // if ((irqstatus & TRANSMIT_INTERRUPT) || (!atomic_read(&dev->DataSendReady) && !pcan_fifo_empty(&dev->writeFifo) && (dev->readreg(dev, CHIPSTATUS) & TRANS_BUFFER_STATUS)))
+    if (irqstatus & TRANSMIT_INTERRUPT) 
     {
       // handle transmission
-#ifdef XENOMAI
-      if ((err = sja1000_write(dev,ctx)))
-#else
-      if ((err = sja1000_write(dev)))
-#endif
+      if ((err = SJA1000_FUNCTION_CALL(sja1000_write)))
       {
         if (err == -ENODATA)
           wwakeup++;
         else
         {
           dev->nLastError = err;
-          dev->dwErrorCounter++; 
+          dev->dwErrorCounter++;
           dev->wCANStatus |= CAN_ERR_QXMTFULL; // fatal error!
         }
       }
       dev->ucActivityState = ACTIVITY_XMIT; // reset to ACTIVITY_IDLE by cyclic timer
     }
-  
-    if (status & DATA_OVERRUN_INTERRUPT)
+
+    if (irqstatus & DATA_OVERRUN_INTERRUPT)
     {
       // handle data overrun
       dev->wCANStatus |= CAN_ERR_OVERRUN;
@@ -650,134 +614,142 @@ int IRQHANDLER(sja1000_base_irqhandler, int irq, void *dev_id, struct pt_regs *r
       rwakeup++;
       dev->dwErrorCounter++;
 
-      dev->writereg(dev, COMMAND, CLEAR_DATA_OVERRUN);  
+      dev->writereg(dev, COMMAND, CLEAR_DATA_OVERRUN);
       wmb();
       dev->ucActivityState = ACTIVITY_XMIT; // reset to ACTIVITY_IDLE by cyclic timer
-    }   
-    
-    if (status & RECEIVE_INTERRUPT)
+    }
+
+    if (irqstatus & RECEIVE_INTERRUPT)
     {
       // handle receiption
-#ifdef XENOMAI
-      if ((err = sja1000_read_frames(dev,ctx)) < 0) /* put to input queues */
-#else
-      if ((err = sja1000_read_frames(dev)) < 0) /* put to input queues */
-#endif
+      if ((err = SJA1000_FUNCTION_CALL(sja1000_read_frames)) < 0) /* put to input queues */
       {
         dev->nLastError = err;
         dev->dwErrorCounter++;
         dev->wCANStatus |=  CAN_ERR_QOVERRUN;
 
         // throw away last message which was refused by fifo
-        dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);  
+        dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);
         wmb();
       }
-      
-      if (err > 0) // successfully enqueued into chardev FIFO      
+
+      if (err > 0) // successfully enqueued into chardev FIFO
         rwakeup++;
-        
+
       dev->ucActivityState = ACTIVITY_XMIT; // reset to ACTIVITY_IDLE by cyclic timer
     }
-  
-    if (status & (BUS_ERROR_INTERRUPT | ERROR_PASSIV_INTERRUPT))
+
+    if (irqstatus & (BUS_ERROR_INTERRUPT | ERROR_PASSIV_INTERRUPT | ERROR_WARN_INTERRUPT))
     {
-      if (status & ERROR_PASSIV_INTERRUPT)
+      // DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), irqstatus=0x%02x\n", DEVICE_NAME, irqstatus); 
+
+      if (irqstatus & (ERROR_PASSIV_INTERRUPT | ERROR_WARN_INTERRUPT))
       {
-        dev->wCANStatus |=  CAN_ERR_BUSHEAVY;
-        ef.can_id  |= CAN_ERR_CRTL;
-        ef.data[1] |= CAN_ERR_CRTL_RX_WARNING;
-        dev->dwErrorCounter++;        
+        u8 chipstatus = dev->readreg(dev, CHIPSTATUS);
+        
+		// DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), chipstatus=0x%02x\n", DEVICE_NAME, chipstatus);
+        switch (chipstatus & (BUS_STATUS | ERROR_STATUS))
+        {
+          case 0x00: 
+                    // error active, clear only local status
+                    dev->busStatus = CAN_ERROR_ACTIVE;
+                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (1)\n", DEVICE_NAME);                   
+                    dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY | CAN_ERR_BUSLIGHT); 
+                    break;
+          case BUS_STATUS:
+          case BUS_STATUS | ERROR_STATUS:
+                    // bus-off
+                    dev->busStatus = CAN_BUS_OFF;                    
+                    dev->wCANStatus |=  CAN_ERR_BUSOFF;
+                    ef.can_id |= CAN_ERR_BUSOFF_NETDEV;
+                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_BUS_OFF\n", DEVICE_NAME);                   
+                    break;
+          case ERROR_STATUS: 
+                    if (irqstatus & ERROR_PASSIV_INTERRUPT)
+                    {
+                      // either enter or leave error passive status
+                      if (dev->busStatus == CAN_ERROR_PASSIVE)
+                      {
+                        // go back to error active
+                        dev->busStatus = CAN_ERROR_ACTIVE;
+                        dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY); 
+                        dev->wCANStatus |=  CAN_ERR_BUSLIGHT;
+                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (2)\n", DEVICE_NAME);                   
+                      }
+                      else
+                      {
+                        // enter error passive state
+                        dev->busStatus = CAN_ERROR_PASSIVE;
+                        dev->wCANStatus &=  ~CAN_ERR_BUSOFF; 
+                        dev->wCANStatus |=  CAN_ERR_BUSHEAVY;                     
+                        ef.can_id  |= CAN_ERR_CRTL;
+                        ef.data[1] |= (CAN_ERR_CRTL_RX_PASSIVE | CAN_ERR_CRTL_TX_PASSIVE);
+                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_PASSIVE\n", DEVICE_NAME);                   
+                      }
+                    }
+                    else
+                    {
+                      // it was a warning limit reached event
+                      dev->busStatus = CAN_ERROR_ACTIVE;                    
+                      dev->wCANStatus |=  CAN_ERR_BUSLIGHT;                     
+                      ef.can_id  |= CAN_ERR_CRTL;
+                      ef.data[1] |= (CAN_ERR_CRTL_RX_WARNING | CAN_ERR_CRTL_TX_WARNING);
+                      DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (3)\n", DEVICE_NAME);                   
+                    }
+                    break;
+        }
       }
-       
-      // don't restart sja1000 after Bus Off
-      if (status & BUS_ERROR_INTERRUPT)
-      {
-        dev->wCANStatus |=  CAN_ERR_BUSOFF;
-        ef.can_id |= CAN_ERR_BUSOFF_NETDEV;
-        dev->dwErrorCounter++;        
-      }
-      
+
+      // count each error signal even if it does not change any bus or error state
+      dev->dwErrorCounter++;        
+
       // wake up pending reads or writes
       rwakeup++;
       wwakeup++;
       dev->ucActivityState = ACTIVITY_XMIT; // reset to ACTIVITY_IDLE by cyclic timer
-    } 
-    
+    }
+
     /* if an error condition occurred, send an error frame to the userspace */
     if (ef.can_id)
-    { 
+    {
       struct timeval tv;
-    
-#ifndef XENOMAI
-      do_gettimeofday(&tv); /* create timestamp */
-#endif
-    
+
+      DO_GETTIMEOFDAY(tv); /* create timestamp */
+
       ef.can_id  |= CAN_ERR_FLAG;
       ef.can_dlc  = CAN_ERR_DLC;
 
-#ifdef XENOMAI
-{
-    rtdm_lockctx_t lockctx;
-    rtdm_lock_get_irqsave(&ctx->in_lock, lockctx);
-#endif
-    
+      SJA1000_LOCK_IRQSAVE(in_lock);
+
       if (pcan_xxxdev_rx(dev, &ef, &tv) > 0) // put into specific data sink
         rwakeup++;
 
-#ifdef XENOMAI
-    rtdm_lock_put_irqrestore(&ctx->in_lock, lockctx);
-}
-#endif
+      SJA1000_UNLOCK_IRQRESTORE(in_lock);
 
       memset(&ef, 0, sizeof(ef)); // clear for next loop
     }
-    
-#ifdef XENOMAI
-    ret = RTDM_IRQ_HANDLED;
-#else
-    ret = 1; 
-#endif
+
+    ret = SJA1000_IRQ_HANDLED;
   }
 
-#ifdef XENOMAI
-  rtdm_lock_put_irqrestore(&ctx->sja_lock, lockctx);
-#endif
+  SJA1000_UNLOCK_IRQRESTORE(sja_lock);
 
   if (wwakeup)
   {
     atomic_set(&dev->DataSendReady, 1); // signal to write I'm ready
     wmb();
-    #ifdef XENOMAI
-    rtdm_event_signal(&ctx->out_event);
-    #else
-    wake_up_interruptible(&dev->write_queue);
-    #endif
+    SJA1000_WAKEUP_WRITE();
     #ifdef NETDEV_SUPPORT
     if (dev->netdev)
       netif_wake_queue(dev->netdev);
     #endif
   }
-  
+
   if (rwakeup)
-    #ifdef XENOMAI
-    rtdm_event_signal(&ctx->in_event);
-    #else
-    wake_up_interruptible(&dev->read_queue);
-  #endif
+    SJA1000_WAKEUP_READ();
 
   return ret;
 }
-
-#ifndef XENOMAI
-irqreturn_t IRQHANDLER(sja1000_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
-{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
-  IRQHANDLER(sja1000_base_irqhandler, irq, dev_id, regs);
-#else
-  return IRQHANDLER(sja1000_base_irqhandler, irq, dev_id, regs);
-#endif
-}
-#endif
 
 //----------------------------------------------------------------------------
 // probe for a sja1000 - use it only in reset mode!
@@ -785,51 +757,51 @@ int  sja1000_probe(struct pcandev *dev)
 {
   u8  tmp;
   u8  _clkdivider= clkdivider(dev);
-  
+
   DPRINTK(KERN_DEBUG "%s: sja1000_probe()\n", DEVICE_NAME);
-    
+
   // trace the clockdivider register to test for sja1000 / 82c200
   tmp = dev->readreg(dev, CLKDIVIDER);
-  DPRINTK(KERN_DEBUG "%s: CLKDIVIDER traced (0x%02x)\n", DEVICE_NAME, tmp); 
+  DPRINTK(KERN_DEBUG "%s: CLKDIVIDER traced (0x%02x)\n", DEVICE_NAME, tmp);
   if (tmp & 0x10)
     goto fail;
-                        
+
   // until here, it's either a 82c200 or a sja1000
   if (set_reset_mode(dev))
-    goto fail;    
+    goto fail;
 
-  dev->writereg(dev, CLKDIVIDER, _clkdivider); // switch to PeliCAN mode 
+  dev->writereg(dev, CLKDIVIDER, _clkdivider); // switch to PeliCAN mode
   sja1000_irq_disable(dev);                    // precautionary disable interrupts
-  wmb();   
+  wmb();
   DPRINTK(KERN_DEBUG "%s: Hopefully switched to PeliCAN mode\n", DEVICE_NAME);
-  
+
   tmp = dev->readreg(dev, CHIPSTATUS);
-  DPRINTK(KERN_DEBUG "%s: CHIPSTATUS traced (0x%02x)\n", DEVICE_NAME, tmp); 
+  DPRINTK(KERN_DEBUG "%s: CHIPSTATUS traced (0x%02x)\n", DEVICE_NAME, tmp);
   if ((tmp & 0x30) != 0x30)
     goto fail;
-  
+
   tmp = dev->readreg(dev, INTERRUPT_STATUS);
   DPRINTK(KERN_DEBUG "%s: INTERRUPT_STATUS traced (0x%02x)\n", DEVICE_NAME, tmp);
   if (tmp & 0xfb)
     goto fail;
- 
+
   tmp = dev->readreg(dev, RECEIVE_MSG_COUNTER);
   DPRINTK(KERN_DEBUG "%s: RECEIVE_MSG_COUNTER traced (0x%02x)\n", DEVICE_NAME, tmp);
   if (tmp)
     goto fail;
-    
+
   DPRINTK(KERN_DEBUG "%s: sja1000_probe() is OK\n", DEVICE_NAME);
   return 0;
-    
+
   fail:
   DPRINTK(KERN_DEBUG "%s: sja1000_probe() failed\n", DEVICE_NAME);
-  
+
   return -ENXIO; // no such device or address
 }
 
 //----------------------------------------------------------------------------
 // calculate BTR0BTR1 for odd bitrates
-// 
+//
 // most parts of this code is from Arnaud Westenberg email:arnaud@wanadoo.nl
 // www.home.wanadoo.nl/arnaud
 //
@@ -850,14 +822,14 @@ static int sja1000_baud_rate(int rate, int flags)
   u16 wBTR0BTR1;
   int sjw = 0;
   int sampl_pt = 90;
-  
+
   // some heuristic specials
   if (rate > ((1000000 + 500000) / 2))
     sampl_pt = 75;
 
   if (rate < ((12500 + 10000) / 2))
     sampl_pt = 75;
-    
+
   if (rate < ((100000 + 125000) / 2))
     sjw = 1;
 
@@ -867,11 +839,11 @@ static int sja1000_baud_rate(int rate, int flags)
     brp = clock / ((1 + tseg / 2) * rate) + tseg % 2;
     if ((brp == 0) || (brp > 64))
       continue;
-    
+
     error = rate - clock / (brp * (1 + tseg / 2));
     if (error < 0)
       error = -error;
-      
+
     if (error <= best_error) 
     {
       best_error = error;
@@ -880,24 +852,24 @@ static int sja1000_baud_rate(int rate, int flags)
       best_rate = clock/(brp*(1+tseg/2));
     }
   }
-  
+
   if (best_error && (rate / best_error < 10)) 
   {
     DPRINTK(KERN_ERR "%s: bitrate %d is not possible with %d Hz clock\n", DEVICE_NAME, rate, 2 * clock);
-    
+
     return 0;
   }
-  
+
   tseg2 = best_tseg - (sampl_pt * (best_tseg + 1)) / 100;
-  
+
   if (tseg2 < 0)
     tseg2 = 0;
-    
+
   if (tseg2 > MAX_TSEG2)
     tseg2 = MAX_TSEG2;
-    
+
   tseg1 = best_tseg - tseg2 - 2;
-  
+
   if (tseg1 > MAX_TSEG1) 
   {
     tseg1 = MAX_TSEG1;
@@ -906,7 +878,7 @@ static int sja1000_baud_rate(int rate, int flags)
 
   wBTR0BTR1 = ((sjw<<6 | best_brp) << 8) | (((flags & BTR1_SAM) != 0)<<7 | tseg2<<4 | tseg1);
 
-  return wBTR0BTR1;  
+  return wBTR0BTR1;
 }
 
 //----------------------------------------------------------------------------
@@ -914,7 +886,7 @@ static int sja1000_baud_rate(int rate, int flags)
 u16 sja1000_bitrate(u32 dwBitRate)
 {
   u16 wBTR0BTR1 = 0;;
-  
+
   // get default const values
   switch (dwBitRate)
   {
@@ -928,17 +900,17 @@ u16 sja1000_bitrate(u32 dwBitRate)
     case   10000: wBTR0BTR1 = CAN_BAUD_10K;  break;
     case    5000: wBTR0BTR1 = CAN_BAUD_5K;   break;
     case       0: wBTR0BTR1 = 0;             break;
-    
-    default:  
+
+    default:
          // calculate for exotic values
            wBTR0BTR1 = sja1000_baud_rate(dwBitRate, 0);
   }
-  
+
   DPRINTK(KERN_DEBUG "%s: sja1000_bitrate(%d) = 0x%04x\n", DEVICE_NAME, dwBitRate, wBTR0BTR1);
-  
+
   return wBTR0BTR1;
 }
- 
+
 // end
 
 

@@ -26,7 +26,7 @@
 //
 // pcan_netdev.c - CAN network device support functions
 //
-// $Id: pcan_netdev.c 478 2007-03-05 19:35:27Z ohartkopp $
+// $Id: pcan_netdev.c 525 2007-10-17 13:06:25Z ohartkopp $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>
@@ -85,6 +85,7 @@ static int pcan_netdev_close(struct net_device *dev)
 }
 
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
 //----------------------------------------------------------------------------
 // AF_CAN netdevice: get statistics for device
 //----------------------------------------------------------------------------
@@ -95,6 +96,7 @@ static struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
   /* TODO: read statistics from chip */
   return &priv->stats;
 }
+#endif
 
 
 //----------------------------------------------------------------------------
@@ -102,9 +104,9 @@ static struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
 //----------------------------------------------------------------------------
 static void pcan_netdev_tx_timeout(struct net_device *dev)
 {
-  struct can_priv *priv = netdev_priv(dev);
+  struct net_device_stats *stats = dev->get_stats(dev);
 
-  priv->stats.tx_errors++;
+  stats->tx_errors++;
   netif_wake_queue(dev);
 }
 
@@ -116,6 +118,7 @@ static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 {
   struct can_priv *priv = netdev_priv(dev);
   struct pcandev  *pdev = priv->pdev;
+  struct net_device_stats *stats = dev->get_stats(dev);
   struct can_frame *cf = (struct can_frame*)skb->data;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, dev->name);
@@ -125,8 +128,8 @@ static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 
   pdev->netdevice_write(pdev, cf); /* ignore return value */
 
-  priv->stats.tx_packets++;
-  priv->stats.tx_bytes += cf->can_dlc;
+  stats->tx_packets++;
+  stats->tx_bytes += cf->can_dlc;
 
   dev->trans_start = jiffies;
 
@@ -142,8 +145,8 @@ static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv)
 {
   struct net_device *ndev = dev->netdev;
-  struct can_priv   *priv = (struct can_priv*)ndev->priv;
-  struct sk_buff    *skb;
+  struct net_device_stats *stats = ndev->get_stats(ndev);
+  struct sk_buff *skb;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, ndev->name);
         
@@ -154,21 +157,32 @@ int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv
 
   skb->dev      = ndev;
   skb->protocol = htons(ETH_P_CAN);
+  skb->pkt_type = PACKET_BROADCAST;
+  skb->ip_summed = CHECKSUM_UNNECESSARY;
 
+  #if 0
+  /*
+   * Currently the driver only supports timestamp setting at host arrival time.
+   * Therefore the netdev support can used the timestamp provided by netif_rx()
+   * which is set when there is no given timestamp (and when network timestamps
+   * are not disabled by default in the host). So we just use the mechanics
+   * like any other network device does ...
+   */
   if (tv)
     #ifdef LINUX_26
     skb_set_timestamp(skb, tv);
     #else
     skb->stamp = *tv;
     #endif
+  #endif
 
   memcpy(skb_put(skb, sizeof(struct can_frame)), cf, sizeof(struct can_frame));
   
   netif_rx(skb);
 
   ndev->last_rx = jiffies;
-  priv->stats.rx_packets++;
-  priv->stats.rx_bytes += cf->can_dlc;
+  stats->rx_packets++;
+  stats->rx_bytes += cf->can_dlc;
 
   return 0;
 }
@@ -184,12 +198,16 @@ void pcan_netdev_init(struct net_device *dev)
     return;
 
   dev->change_mtu           = NULL;
+  dev->set_mac_address      = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
   dev->hard_header          = NULL;
   dev->rebuild_header       = NULL;
-  dev->set_mac_address      = NULL;
   dev->hard_header_cache    = NULL;
   dev->header_cache_update  = NULL;
   dev->hard_header_parse    = NULL;
+#else
+  dev->header_ops           = NULL;
+#endif
 
   dev->type             = ARPHRD_CAN;
   dev->hard_header_len  = 0;
@@ -202,7 +220,9 @@ void pcan_netdev_init(struct net_device *dev)
   dev->open             = pcan_netdev_open;
   dev->stop             = pcan_netdev_close;
   dev->hard_start_xmit  = pcan_netdev_tx;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
   dev->get_stats        = pcan_netdev_get_stats;
+#endif
 
   dev->tx_timeout       = pcan_netdev_tx_timeout;
   dev->watchdog_timeo   = TX_TIMEOUT;
@@ -248,11 +268,17 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
     }
   }
 
-  if ((name[0]) && (__dev_get_by_name(name))) { /* check 'name' against existing device names */
-
-    printk(KERN_INFO "%s: netdevice name %s to be assigned exists already.\n",
-           DEVICE_NAME, name);
-    name[0] = 0; /* mark for auto assignment */
+  if (name[0]) {
+    /* check wanted assigned 'name' against existing device names */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+    if (__dev_get_by_name(name)) {
+#else
+    if (__dev_get_by_name(&init_net, name)) {
+#endif
+      printk(KERN_INFO "%s: netdevice name %s to be assigned exists already.\n",
+             DEVICE_NAME, name);
+      name[0] = 0; /* mark for auto assignment */
+    }
   }
 }
 

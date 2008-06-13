@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2007 PEAK System-Technik GmbH
+// Copyright (C) 2001-2008 PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_dongle.c 512 2007-06-01 12:06:00Z khitschler $
+// $Id: pcan_dongle.c 533 2008-02-04 21:31:54Z khitschler $
 //
 //****************************************************************************
 
@@ -64,8 +64,6 @@
 #define ECR_PORT_SIZE            1  // size of the associated ECR register
 #define DNG_DEFAULT_COUNT        4  // count of defaults for init
 
-typedef void IRQHANDLER((*PARPORT_IRQHANDLER), int, void *, struct pt_regs *);
-
 //****************************************************************************
 // GLOBALS
 
@@ -87,6 +85,11 @@ static unsigned char nibble_decode[32] =
 
 //****************************************************************************
 // CODE
+#ifdef NO_RT
+  #include "pcan_dongle_linux.c"
+#else
+  #include "pcan_dongle_rt.c"
+#endif
 
 //----------------------------------------------------------------------------
 // enable and disable irqs
@@ -109,12 +112,9 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   u16 _PB_ = _PA_ + 1;
   u16 _PC_ = _PB_ + 1;
   u8  b0, b1 ;
-  u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
-  #ifndef XENOMAI
-  unsigned long flags;
+  u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable 
 
-  spin_lock_irqsave(&dev->port.dng.lock, flags);
-  #endif
+  SPIN_LOCK_IRQSAVE();
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
   outb((port & 0x1F) | 0x80,      _PA_);
@@ -124,9 +124,7 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   b0=nibble_decode[inb(_PB_)>>3];
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
-  #ifndef XENOMAI
-  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
-  #endif
+  SPIN_UNLOCK_IRQRESTORE();
 
   return  (b1 << 4) | b0 ;
 }
@@ -136,11 +134,8 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   u16 _PA_ = (u16)dev->port.dng.dwPort;
   u16 _PC_ = _PA_ + 2;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
-#ifndef XENOMAI
-  unsigned long flags;
 
-  spin_lock_irqsave(&dev->port.dng.lock, flags);
-#endif
+  SPIN_LOCK_IRQSAVE();
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
   outb(port & 0x1F,               _PA_);
@@ -148,9 +143,7 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   outb(data,                      _PA_);
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
-#ifndef XENOMAI
-  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
-#endif
+  SPIN_UNLOCK_IRQRESTORE();
 }
 
 // functions for EPP port
@@ -160,11 +153,8 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   u16 _PC_ = _PA_ + 2;
   u8  wert;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
-#ifndef XENOMAI
-  unsigned long flags;
 
-  spin_lock_irqsave(&dev->port.dng.lock, flags);
-#endif
+  SPIN_LOCK_IRQSAVE();
 
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
   outb((port & 0x1F) | 0x80,      _PA_);
@@ -172,56 +162,16 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   wert = inb(_PA_);
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
 
-#ifndef XENOMAI
-  spin_unlock_irqrestore(&dev->port.dng.lock, flags);
-#endif
+  SPIN_UNLOCK_IRQRESTORE();
 
   return wert;
-}
-
-#ifdef XENOMAI
-static int pcan_dongle_req_irq(struct rtdm_dev_context *context)
-{
-  struct pcanctx_rt *ctx;
-  struct pcandev *dev;
-  
-  ctx = (struct pcanctx_rt *)context->dev_private;
-  dev = ctx->dev;
-#else
-static int pcan_dongle_req_irq(struct pcandev *dev)
-{
-#endif
-  if (dev->wInitStep == 3)
-  {
-    #ifdef XENOMAI
-    int err;
-    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, sja1000_irqhandler_rt,
-            RTDM_IRQTYPE_SHARED | RTDM_IRQTYPE_EDGE, context->device->proc_name, ctx)))
-      return err;
-    #else
-    #ifndef PARPORT_SUBSYSTEM
-    int err;
-    if ((err = request_irq(dev->port.dng.wIrq, sja1000_irqhandler, SA_INTERRUPT | SA_SHIRQ, "pcan", dev)))
-      return err;
-    #endif
-    #endif
-
-    dev->wInitStep++;
-  }
-
-  return 0;
 }
 
 static void pcan_dongle_free_irq(struct pcandev *dev)
 {
   if (dev->wInitStep == 4)
   {
-    #ifndef XENOMAI
-    #ifndef PARPORT_SUBSYSTEM
-    free_irq(dev->port.dng.wIrq, dev);
-    #endif
-    #endif
-
+    FREE_IRQ();
     dev->wInitStep--;
   }
 }
@@ -246,9 +196,9 @@ static int pcan_dongle_cleanup(struct pcandev *dev)
            #endif
     case 1:
            #ifdef PARPORT_SUBSYSTEM
-             #ifndef XENOMAI
-             parport_unregister_device(dev->port.dng.pardev);
-             #endif
+
+             PARPORT_UNREGISTER_DEVICE();
+
            #else
              release_region(dev->port.dng.dwPort, DNG_PORT_SIZE);
            #endif
@@ -287,7 +237,7 @@ static void restoreECR(struct pcandev *dev)
 static int pcan_dongle_probe(struct pcandev *dev) // probe for type
 {
   struct parport *p;
-
+  
   DPRINTK(KERN_DEBUG "%s: pcan_dongle_probe() - PARPORT_SUBSYSTEM\n", DEVICE_NAME);
   
   // probe does not probe for the sja1000 device here - this is done at sja1000_open()
@@ -299,19 +249,9 @@ static int pcan_dongle_probe(struct pcandev *dev) // probe for type
   }
   else
   {
-    #ifndef XENOMAI
-    // register my device at the parport
-    dev->port.dng.pardev = parport_register_device(p, "pcan", NULL, NULL, 
-                                      (PARPORT_IRQHANDLER)sja1000_irqhandler, 0, (void *)dev);
-              
-    if (!dev->port.dng.pardev)
-    {
-      DPRINTK(KERN_DEBUG "found no parport device\n");
-      return -ENODEV;
-    }
-    #endif
+    // register my device at the parport in no realtime
+    PARPORT_REGISTER_DEVICE();
   }
-  
   return 0;
 }
 #else
@@ -347,22 +287,7 @@ static int pcan_dongle_open(struct pcandev *dev)
   
   DPRINTK(KERN_DEBUG "%s: pcan_dongle_open()\n", DEVICE_NAME);
   
-  #ifndef XENOMAI
-  #ifdef PARPORT_SUBSYSTEM
-  result = parport_claim(dev->port.dng.pardev);
-  
-  if (!result)
-  {
-    if (dev->port.dng.pardev->port->irq == PARPORT_IRQ_NONE)
-    {
-      printk(KERN_ERR "%s: no irq associated to parport.\n", DEVICE_NAME);
-      result = -ENXIO;
-    }
-  }
-  else
-    printk(KERN_ERR "%s: can't claim parport.\n", DEVICE_NAME);  
-  #endif // PARPORT_SUBSYSTEM
-  #endif
+  PARPORT_CLAIM();
   
   // save port state
   if (!result)
@@ -407,13 +332,9 @@ static int pcan_dongle_release(struct pcandev *dev)
   // restore port state
   outb(dev->port.dng.ucOldDataContent, wPort);
   outb(dev->port.dng.ucOldControlContent, wPort + 2);
-  
-  #ifndef XENOMAI
-  #ifdef PARPORT_SUBSYSTEM
-  parport_release(dev->port.dng.pardev);
-  #endif
-  #endif
-  
+
+  PARPORT_RELEASE();
+
   return 0;
 }
 
@@ -530,7 +451,7 @@ int pcan_create_dongle_devices(char *type, u32 io, u16 irq)
   {
     list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list        
     pcan_drv.wDeviceCount++;
-  }        
+  }
 
   fail:
   if (result)

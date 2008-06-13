@@ -25,7 +25,7 @@
 //
 // common.c - common parts for transmittest and receivetest
 //
-// $Id: common.c 454 2007-02-11 22:18:01Z khitschler $
+// $Id: common.c 538 2008-02-15 16:06:45Z edouard $
 //
 //****************************************************************************
 
@@ -52,7 +52,7 @@
 // CODE 
 
 // print GPL disclaimer
-void disclaimer(char *prgName)
+void disclaimer(const char *prgName)
 {
   printf("\n");
   printf("%s Version \"%s\"  (www.peak-system.com)\n", prgName, current_release);
@@ -136,7 +136,7 @@ char *getNameOfInterface(int nType)
 }
 
 // print out device and channel diagnostics
-void print_diag(char *prgName)
+void print_diag(const char *prgName)
 {
   int err;
   TPDIAG diag;

@@ -25,7 +25,7 @@
 //
 // parser.cpp - parses the input file and put the messages into a list
 //
-// $Id: parser.cpp 360 2006-02-05 10:49:18Z klaus $
+// $Id: parser.cpp 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
@@ -123,7 +123,7 @@ int parser::parse_input_message(char *buffer, TPCANMsg *Message)
   char *ptr = buffer;
   __u32 dwLen;
   __u32 dwDat;
-  int i;
+  uint i;
   int err = EINVAL;
   
   // remove leading blanks

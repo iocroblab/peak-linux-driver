@@ -25,7 +25,7 @@
 //
 // common.h - the header for common parts for transmittest and receivetest
 //
-// $Id: common.h 360 2006-02-05 10:49:18Z klaus $
+// $Id: common.h 538 2008-02-15 16:06:45Z edouard $
 //
 //****************************************************************************
 
@@ -39,7 +39,7 @@
 //****************************************************************************
 // GLOBALS
 extern HANDLE h;
-extern char *current_release;
+extern const char *current_release;
 
 //****************************************************************************
 // LOCALS
@@ -52,7 +52,7 @@ extern "C"
 #endif
 
 // print out GPL disclaimer
-void disclaimer(char *prgName);
+void disclaimer(const char *prgName);
 
 // print out the contents of a CAN message  
 void print_message(TPCANMsg *m);
@@ -64,7 +64,7 @@ int getTypeOfInterface(char *szTypeName);
 char *getNameOfInterface(int nType);
 
 // print out device and channel diagnostics
-void print_diag(char *prgName);
+void print_diag(const char *prgName);
 
 #ifdef __cplusplus
 }

@@ -36,7 +36,7 @@
 // pcan_main.c - the starting point of the driver,
 //               init and cleanup and proc interface
 //
-// $Id: pcan_main.c 501 2007-04-30 05:20:59Z edouard $
+// $Id: pcan_main.c 526 2007-10-29 21:42:02Z khitschler $
 //
 //****************************************************************************
 
@@ -108,9 +108,6 @@ char *assign  = NULL;
 //----------------------------------------------------------------------------
 // the global driver object, create it
 struct driverobj pcan_drv = {};
-#ifdef XENOMAI
-struct list_head device_list;
-#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0)
 //----------------------------------------------------------------------------
@@ -150,7 +147,7 @@ const char current_config[] = " "
 #ifdef NETDEV_SUPPORT
 "[net] "
 #endif
-#ifdef XENOMAI
+#ifndef NO_RT
 "[rt] "
 #endif
 ;
@@ -163,6 +160,11 @@ char config[] = "*--------------------------------------------------------------
 
 //****************************************************************************
 // CODE
+#ifdef NO_RT
+  #include "pcan_main_linux.c"
+#else
+  #include "pcan_main_rt.c"
+#endif
 
 //****************************************************************************
 // debug utility
@@ -290,7 +292,7 @@ static void subtract_timeval(struct timeval *x, struct timeval *y)
 void get_relative_time(struct timeval *tv, struct timeval *tr)
 {
   if (!tv)
-    do_gettimeofday(tr);
+    DO_GETTIMEOFDAY((*tr));
   else
     memcpy(tr, tv, sizeof(*tr));
   
@@ -302,43 +304,6 @@ void timeval2pcan(struct timeval *tv, u32 *msecs, u16 *usecs)
 {
   *msecs = (u32)(tv->tv_sec * 1000 + tv->tv_usec / 1000);
   *usecs = (u16)(tv->tv_usec % 1000);  
-} 
-
-//----------------------------------------------------------------------------
-// put received CAN frame into chardev receive FIFO
-// maybe this goes to a new file pcan_chardev.c some day.
-int pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv)
-{
-  int result = 0;
-
-  // filter out extended messages in non extended mode
-  if (dev->bExtended || !(cf->can_id & CAN_EFF_FLAG)) 
-  { 
-    #ifndef XENOMAI
-    if (!pcan_do_filter(dev->filter, cf->can_id))
-    #endif
-    {
-      TPCANRdMsg msg;
-    #ifndef XENOMAI
-      struct timeval tr;
-    
-      get_relative_time(tv, &tr);
-      timeval2pcan(&tr, &msg.dwTime, &msg.wUsec); 
-    #endif
-  
-      /* convert to old style FIFO message until FIFO supports new */
-      /* struct can_frame and error frames */
-      frame2msg(cf, &msg.Msg);
-      
-      // step forward in fifo
-      result = pcan_fifo_put(&dev->readFifo, &msg);
-      
-      // flag to higher layers that a message was put into fifo or an error occurred
-      result = (result) ? result : 1;
-    }
-  }
-
-  return result;
 }
 
 //----------------------------------------------------------------------------
@@ -365,7 +330,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
     u32 dwPort = 0;
     u16 wIrq   = 0;
     #ifdef NETDEV_SUPPORT
-    struct can_priv *priv; /* rx/tx statistics can be found here */
+    struct net_device_stats *stats; /* rx/tx statistics can be found here */
     #endif
     
     dev = (struct pcandev *)ptr;  
@@ -406,7 +371,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
     }
 
     #ifdef NETDEV_SUPPORT
-    priv = netdev_priv(dev->netdev);
+    stats = dev->netdev->get_stats(dev->netdev);
     #endif
 
     len += sprintf(page + len, "%2d %6s %4s %08x %03d 0x%04x %08lx %08lx %08x %08x 0x%04x\n",
@@ -421,8 +386,8 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
                    wIrq,
                    dev->wBTR0BTR1,
                    #ifdef NETDEV_SUPPORT
-                   priv->stats.rx_packets,
-                   priv->stats.tx_packets + dev->writeFifo.dwTotal,
+                   stats->rx_packets,
+                   stats->tx_packets + dev->writeFifo.dwTotal,
                    #else
                    (unsigned long)dev->readFifo.dwTotal,
                    (unsigned long)dev->writeFifo.dwTotal,
@@ -438,87 +403,61 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
   return len;
 }
 
+void dev_unregister(void)
+{
+#ifdef NETDEV_SUPPORT
+  struct list_head *ptr;
+  struct pcandev   *pdev;
+  // remove all netdevice registrations except those for USB-devices
+  // which is done by pcan_usb_plugout().
+  for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
+  {
+    pdev = (struct pcandev *)ptr;
+    if (pdev->wType != HW_USB)
+      pcan_netdev_unregister(pdev);
+  }
+#endif
+}
+
+void remove_dev_list(void)
+{
+  struct pcandev *dev;
+  while (!list_empty(&pcan_drv.devices)) // cycle through the list of devices and remove them
+  {
+    dev = (struct pcandev *)pcan_drv.devices.prev; // empty in reverse order
+    dev->cleanup(dev);
+    list_del(&dev->list);
+    // free all device allocted memory 
+    kfree(dev);
+  }
+}
 //----------------------------------------------------------------------------
 // is called when the device is removed 'rmmod pcan'
 void cleanup_module(void)
 {
-  struct pcandev *dev;
-  #ifdef XENOMAI
-  struct rt_device *rt_dev;
-  #endif
-  
+
   DPRINTK(KERN_DEBUG "%s: cleanup_module()\n", DEVICE_NAME);
 
   switch (pcan_drv.wInitStep)
   {
     case 3: remove_proc_entry(DEVICE_NAME, NULL);
     case 2:
-            #ifdef XENOMAI
-            {
-              struct list_head *ptr;
-
-              // unregister all registered devices
-              for (ptr = device_list.next; ptr != &device_list; ptr = ptr->next)
-              {
-                rtdm_dev_unregister(((struct rt_device *)ptr)->device, 1000);
-              }
-            }
-            #else
-            unregister_chrdev(pcan_drv.nMajor, DEVICE_NAME);
-            #endif
-            #ifdef NETDEV_SUPPORT
-            {
-              struct list_head *ptr;
-              struct pcandev   *pdev;
-    
-              // remove all netdevice registrations except those for USB-devices
-              // which is done by pcan_usb_plugout().
-              for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-                {
-                  pdev = (struct pcandev *)ptr;
-                  if (pdev->wType != HW_USB)
-                    pcan_netdev_unregister(pdev);
-                }
-            }
-            #endif
+            DEV_UNREGISTER();
     case 1: 
     case 0: 
             #ifdef USB_SUPPORT
             pcan_usb_deinit();
             #endif
-            
+
             #ifdef PCCARD_SUPPORT
             pcan_pccard_deinit();
             #endif
 
-            #ifdef XENOMAI
-            while (!list_empty(&device_list)) // cycle through the list of devices and remove them
-            {
-              rt_dev = (struct rt_device *)device_list.prev; // empty in reverse order
+            REMOVE_DEV_LIST();
 
-              list_del(&rt_dev->list);
-
-              // free all device allocted memory
-              kfree(rt_dev->device); 
-              kfree(rt_dev);
-            }
-            #endif
-
-            while (!list_empty(&pcan_drv.devices)) // cycle through the list of devices and remove them
-            {
-              dev = (struct pcandev *)pcan_drv.devices.prev; // empty in reverse order
-
-              dev->cleanup(dev);
-
-              list_del(&dev->list);
-              
-              // free all device allocted memory 
-              kfree(dev);
-            }
-        
             pcan_drv.wInitStep = 0;
   }
-  
+
   printk(KERN_INFO "%s: removed.\n", DEVICE_NAME);
 }
 
@@ -531,6 +470,7 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
         
   dev->nOpenPaths       = 0;
   dev->nLastError       = 0;
+  dev->busStatus        = CAN_ERROR_ACTIVE;
   dev->dwErrorCounter   = 0;
   dev->dwInterruptCounter = 0;
   dev->wCANStatus       = 0;
@@ -585,10 +525,8 @@ static int make_legacy_devices(void)
   }
   
   #ifdef ISA_SUPPORT
-    #ifndef XENOMAI
   // create lists of devices with the same irqs
-  pcan_create_isa_shared_irq_lists();
-    #endif
+  ISA_SHARED_IRQ_LISTS();
   #endif
  
   return result;
@@ -599,13 +537,10 @@ static int make_legacy_devices(void)
 int init_module(void)
 {
   int result = 0;
-  #ifdef XENOMAI
-  struct list_head *ptr;
-  #endif
-  
+
   memset(&pcan_drv, 0, sizeof(pcan_drv));
   pcan_drv.wInitStep       = 0;
-  do_gettimeofday(&pcan_drv.sInitTime); // store time for timestamp relation, increments in usec
+  DO_GETTIMEOFDAY(pcan_drv.sInitTime); // store time for timestamp relation, increments in usec
   pcan_drv.szVersionString = CURRENT_RELEASE; // get the release name global
   pcan_drv.nMajor          = PCAN_MAJOR;
   
@@ -619,9 +554,6 @@ int init_module(void)
     strncpy(config + (sizeof(config)-sizeof(current_config))/2, current_config, sizeof(current_config)-1);
 
   INIT_LIST_HEAD(&pcan_drv.devices);
-  #ifdef XENOMAI
-  INIT_LIST_HEAD(&device_list);
-  #endif
   pcan_drv.wDeviceCount = 0;
 
   #ifdef PCI_SUPPORT
@@ -653,31 +585,9 @@ int init_module(void)
   
   pcan_drv.wInitStep = 1;
 
-  #ifdef XENOMAI
-  for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-  {
-    xenomai_register_device((struct pcandev *)ptr);
-  }
-  #else
-  // register the driver by the OS
-  if ((result = register_chrdev(pcan_drv.nMajor, DEVICE_NAME, &pcan_fops)) < 0)
+  result = DEV_REGISTER();
+  if (result < 0)
     goto fail;
-  #ifdef NETDEV_SUPPORT
-  {
-    struct list_head *ptr;
-    struct pcandev   *pdev;
-    
-    // create all device entries except those for USB-devices
-    // which is done by pcan_usb_plugin().
-    for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-      {
-        pdev = (struct pcandev *)ptr;
-        if (pdev->wType != HW_USB)
-          pcan_netdev_register(pdev);
-      }
-  }
-  #endif
-  #endif
 
   if (!pcan_drv.nMajor)
     pcan_drv.nMajor = result;
@@ -700,70 +610,3 @@ int init_module(void)
   cleanup_module();
   return result;
 }
-
-#ifdef XENOMAI
-//----------------------------------------------------------------------------
-// register a device supported by xenomai associated to device given
-int xenomai_register_device(struct pcandev *dev)
-{
-  int result = 0;
-  struct rtdm_device *rtdmdev;
-  struct rt_device *rt_dev;
-  
-  if ((rtdmdev = (struct rtdm_device *)kmalloc(sizeof(struct rtdm_device), GFP_KERNEL)) == NULL)
-    goto fail;
-  if ((rt_dev = (struct rt_device *)kmalloc(sizeof(struct rt_device), GFP_KERNEL)) == NULL)
-  {
-    kfree(rtdmdev);
-    goto fail;
-  }
-
-  memcpy(rtdmdev, &pcandev_rt, sizeof(struct rtdm_device));
-  rtdmdev->device_id = dev->nMinor;
-  snprintf(rtdmdev->device_name, RTDM_MAX_DEVNAME_LEN, "pcan%d", dev->nMinor);
-  rtdmdev->proc_name = rtdmdev->device_name;
-  result = rtdm_dev_register(rtdmdev);
-
-  if (!result)
-  {
-    rt_dev->device = rtdmdev;
-    list_add_tail(&rt_dev->list, &device_list);
-  }
-  else
-  {
-    kfree(rtdmdev);
-    kfree(rt_dev);
-    goto fail;
-  }
-  
-  fail:
-  return result;
-}
-
-//----------------------------------------------------------------------------
-// unregister a device supported by xenomai associated to device given
-void xenomai_unregister_device(struct pcandev *dev)
-{
-  struct list_head *ptr;
-  struct rt_device* rt_dev;
-  int _minor = dev->nMinor;
-  
-  for (ptr = device_list.next; ptr != &device_list; ptr = ptr->next)
-  {
-    rt_dev = (struct rt_device *)ptr;
-    if (rt_dev->device->device_id == _minor)
-    {
-      rtdm_dev_unregister(rt_dev->device, 1000);
-      
-      list_del(&rt_dev->list);
-      
-      kfree(rt_dev->device);
-      kfree(rt_dev);
-      break;
-    }
-  }
-}
-#endif
-
-// end
-

@@ -34,7 +34,7 @@
 //
 // sja1000.h - prototypes for sja1000 access functions
 //
-// $Id: pcan_sja1000.h 501 2007-04-30 05:20:59Z edouard $
+// $Id: pcan_sja1000.h 518 2007-08-08 07:40:31Z edouard $
 //
 //****************************************************************************
 
@@ -50,19 +50,18 @@
 
 int  sja1000_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended, u8 bListenOnly);
 void sja1000_release(struct pcandev *dev);
-#ifdef XENOMAI
-int sja1000_write(struct pcandev *dev, struct pcanctx_rt *ctx); 
+
+#ifndef NO_RT
+int sja1000_write(struct pcandev *dev, struct pcanctx_rt *ctx);
+int sja1000_irqhandler_rt(rtdm_irq_t *irq_context);
+int sja1000_irqhandler_common(struct pcandev *dev, struct pcanctx_rt *ctx);
 #else
 int sja1000_write(struct pcandev *dev);
-#endif
-int  sja1000_write_frame(struct pcandev *dev, struct can_frame *cf);
-
-#ifdef XENOMAI
-int sja1000_irqhandler_rt(rtdm_irq_t *irq_context);
-#else
 int IRQHANDLER(sja1000_base_irqhandler, int irq, void *dev_id, struct pt_regs *regs);
 irqreturn_t IRQHANDLER(sja1000_irqhandler, int irq, void *dev_id, struct pt_regs *regs);
+int sja1000_irqhandler_common(struct pcandev *dev);
 #endif
+int  sja1000_write_frame(struct pcandev *dev, struct can_frame *cf);
 
 int  sja1000_probe(struct pcandev *dev);
 u16  sja1000_bitrate(u32 dwBitRate);

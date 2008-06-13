@@ -1,10 +1,7 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2006  PEAK System-Technik GmbH
 //
-// linux@peak-system.com
+// linux@peak-system.com 
 // www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
@@ -22,31 +19,64 @@
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 //
 // Maintainer(s): Klaus Hitschler (klaus.hitschler@gmx.de)
-//
-// Major contributions by:
-//                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
-//                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
-//                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
 //****************************************************************************
 
 //****************************************************************************
+// no-realtime part
+// transmitest_linux.cpp - a simple program to test CAN transmits
 //
-// all parts to handle interface specific parts for pcan-isa
-//
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
+// $Id: transmitest_linux.cpp $
 //
 //****************************************************************************
+// INCLUDE
 
 //****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
+// GLOBALS
+
+#define SET_INIT_STATE(ignored)
 
 //****************************************************************************
-// DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+// CODE
 
-#endif // __PCAN_ISA_H__
+void init()
+{
+}
+
+void do_exit(int error)
+{
+  if (h)
+  {
+    print_diag("transmitest");
+    CAN_Close(h);
+  }
+  printf("transmitest: finished (%d).\n\n", error);
+  exit(error);
+}
+
+void signal_handler(int signal)
+{
+  do_exit(0);
+}
+
+int write_loop()
+{
+// write out endless loop until Ctrl-C
+  while (1)
+  {
+    std::list<TPCANMsg>::iterator iter;
+    int i;
+    for (iter = List->begin(); iter != List->end(); iter++)
+    {
+      // test for standard frames only
+      if ((nExtended == CAN_INIT_TYPE_EX) || !(iter->MSGTYPE & MSGTYPE_EXTENDED)){
+        // send the message
+        if ((errno = CAN_Write(h, &(*iter)))){
+          perror("transmitest: CAN_Write()");
+          return errno;
+        }
+      }
+    }
+  }
+
+  return 0;
+}

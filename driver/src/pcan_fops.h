@@ -34,7 +34,7 @@
 //
 // pcan_fops.h - header for struct fops only
 //
-// $Id: pcan_fops.h 501 2007-04-30 05:20:59Z edouard $
+// $Id: pcan_fops.h 518 2007-08-08 07:40:31Z edouard $
 //
 //****************************************************************************
 
@@ -43,26 +43,32 @@
 #include <linux/kernel.h>   // printk()
 #include <linux/fs.h>       // everything...
 
-#ifdef XENOMAI
-#include <xenomai/rtdm/rtdm_driver.h>
+#ifndef NO_RT
+  #include <rtdm/rtdm_driver.h>
 #endif
 
 //****************************************************************************
 // DEFINES
-int  pcan_open_path(struct pcandev *dev);
-#ifdef XENOMAI
+#ifndef NO_RT
+int pcan_open_path(struct pcandev *dev, struct rtdm_dev_context *context);
 void pcan_release_path(struct pcandev *dev, struct pcanctx_rt *ctx);
 #else
+int pcan_open_path(struct pcandev *dev);
 void pcan_release_path(struct pcandev *dev);
 #endif
+struct pcandev* pcan_search_dev(int minor);
+
+TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev);
+TPSTATUS pcan_ioctl_status_common(struct pcandev *dev);
+TPDIAG pcan_ioctl_diag_common(struct pcandev *dev);
 
 //****************************************************************************
 // GLOBALS
-#ifdef XENOMAI
+
+#ifndef NO_RT
 extern struct rtdm_device pcandev_rt;
 #else
 extern struct file_operations pcan_fops;
 #endif
 
 #endif // __PCAN_FOPS_H__
-

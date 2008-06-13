@@ -1,6 +1,3 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
@@ -27,26 +24,48 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
-//****************************************************************************
-
-//****************************************************************************
-//
-// all parts to handle interface specific parts for pcan-isa
-//
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
 //****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
+//
+// pcan_sja1000_linux.c - all about sja1000 init and data handling
+//
+// $Id: pcan_sja1000_linux.c $
+//
+//****************************************************************************
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+#define SJA1000_IRQ_HANDLED 1
+#define SJA1000_IRQ_NONE 0
 
-#endif // __PCAN_ISA_H__
+#define SJA1000_METHOD_ARGS struct pcandev *dev
+
+#define SJA1000_LOCK_IRQSAVE(type)
+#define SJA1000_UNLOCK_IRQRESTORE(type)
+
+#define SJA1000_WAKEUP_READ() wake_up_interruptible(&dev->read_queue)
+#define SJA1000_WAKEUP_WRITE() wake_up_interruptible(&dev->write_queue)
+#define SJA1000_WAKEUP_EMPTY()
+
+#define SJA1000_FUNCTION_CALL(name) name(dev)
+
+//****************************************************************************
+// CODE
+
+int IRQHANDLER(sja1000_base_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
+{
+  register struct pcandev *dev = (struct pcandev *)dev_id;
+
+  return sja1000_irqhandler_common(dev);
+}
+
+irqreturn_t IRQHANDLER(sja1000_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
+  IRQHANDLER(sja1000_base_irqhandler, irq, dev_id, regs);
+#else
+  return IRQHANDLER(sja1000_base_irqhandler, irq, dev_id, regs);
+#endif
+}

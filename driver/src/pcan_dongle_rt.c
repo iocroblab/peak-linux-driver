@@ -1,8 +1,5 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2007 PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -28,25 +25,46 @@
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
 //                     
+// Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
+//                Philipp Baer (philipp.baer@informatik.uni-ulm.de)
 //****************************************************************************
 
-//****************************************************************************
+//***************************************************************************
 //
-// all parts to handle interface specific parts for pcan-isa
+// all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
+// $Id: pcan_dongle_rt.c $
 //
 //****************************************************************************
-
-//****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+#define SPIN_LOCK_IRQSAVE()
+#define SPIN_UNLOCK_IRQRESTORE()
+#define PARPORT_REGISTER_DEVICE()
+#define PARPORT_UNREGISTER_DEVICE()
+#define FREE_IRQ()
+#define PARPORT_CLAIM()
+#define PARPORT_RELEASE()
 
-#endif // __PCAN_ISA_H__
+//****************************************************************************
+// CODE
+static int pcan_dongle_req_irq(struct rtdm_dev_context *context)
+{
+  struct pcanctx_rt *ctx;
+  struct pcandev *dev;
+  
+  ctx = (struct pcanctx_rt *)context->dev_private;
+  dev = ctx->dev;
+
+  if (dev->wInitStep == 3)
+  {
+    int err;
+    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, sja1000_irqhandler_rt,
+            RTDM_IRQTYPE_SHARED | RTDM_IRQTYPE_EDGE, context->device->proc_name, ctx)))
+    return err;
+    dev->wInitStep++;
+  }
+
+  return 0;
+}

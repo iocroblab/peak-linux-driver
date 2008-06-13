@@ -1,6 +1,3 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
@@ -28,25 +25,45 @@
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
 //                     
+// Contributions: Philipp Baer (philipp.baer@informatik.uni-ulm.de)
 //****************************************************************************
 
 //****************************************************************************
 //
-// all parts to handle interface specific parts for pcan-isa
+// all parts of the isa hardware for pcan-isa devices
 //
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
+// $Id: pcan_isa_rt.c $
 //
 //****************************************************************************
-
-//****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+#define INIT_SAME_IRQ_LIST()
 
-#endif // __PCAN_ISA_H__
+static int pcan_isa_req_irq(struct rtdm_dev_context *context)
+{
+  struct pcanctx_rt *ctx;
+  struct pcandev *dev = (struct pcandev *)NULL;
+  int err;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_isa_req_irq(%p)\n", DEVICE_NAME, dev);
+
+  ctx = (struct pcanctx_rt *)context->dev_private;
+  dev = ctx->dev;
+  if (dev->wInitStep == 3) // init has finished completly 
+  {
+    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, sja1000_irqhandler_rt, 0, context->device->proc_name, ctx)))
+      return err;
+    dev->wInitStep++;
+  }
+
+  return 0;
+}
+
+static void pcan_isa_free_irq(struct pcandev *dev)
+{
+  DPRINTK(KERN_DEBUG "%s: pcan_isa_free_irq(%p)\n", DEVICE_NAME, dev);
+
+  if (dev->wInitStep == 4) // irq was installed
+    dev->wInitStep--;
+}

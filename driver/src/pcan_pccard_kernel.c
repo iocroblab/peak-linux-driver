@@ -31,7 +31,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 507 2007-05-13 09:44:57Z khitschler $
+// $Id: pcan_pccard_kernel.c 541 2008-02-18 17:48:03Z edouard $
 //
 //****************************************************************************
 
@@ -305,7 +305,6 @@ static inline void pccard_disable_CAN_power(PCAN_PCCARD *card)
   pccard_write_eeprom(card, 0, 0);
 }
 
-#ifndef XENOMAI
 //****************************************************************************
 // activity scanner to control LEDs
 static void pccard_activity_scanner(unsigned long ptr)
@@ -372,22 +371,14 @@ static void pccard_stop_activity_scanner(PCAN_PCCARD *card)
   card->run_activity_timer_cyclic = 0;
   del_timer_sync(&card->activity_timer);
 }
-#endif
 
 //****************************************************************************
 // all about interrupt handling
 
 // make a special irqhandler since PCCARD irqs are ISA like
-#ifdef XENOMAI
-static int pcan_pccard_irqhandler_rt(rtdm_irq_t *irq_context)
-{
-  struct pcanctx_rt *ctx = rtdm_irq_get_arg(irq_context, struct pcanctx_rt);
-  struct pcandev *dev = ctx->dev;
-#else
 static irqreturn_t IRQHANDLER(pcan_pccard_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
 {
   struct pcandev *dev = (struct pcandev *)dev_id;
-#endif
   PCAN_PCCARD *card   = dev->port.pccard.card;
   int ret             = 0;
   u16 stop_count      = 100; // prevent to loop infinitely to get all shared interrupts cleared
@@ -400,20 +391,15 @@ static irqreturn_t IRQHANDLER(pcan_pccard_irqhandler, int irq, void *dev_id, str
   {
     if ((dev = card->dev[index % PCCARD_CHANNELS])) // consider singel channel cards, too
     {/* XXX TODO */
-#ifdef XENOMAI
-      int tmpret = sja1000_irqhandler_rt(irq_context);
-#else
+
       int tmpret = IRQHANDLER(sja1000_base_irqhandler, irq, dev, regs);
-#endif
+
       if (!tmpret)
         	loop_count++;
       else
       {
-#ifdef XENOMAI
-	ret = RTDM_IRQ_HANDLED;
-#else
 	ret = 1; 
-#endif
+
         loop_count = 0; // restart, since all channels must respond in one pass with no interrupt pending
       }
         
@@ -433,35 +419,16 @@ static irqreturn_t IRQHANDLER(pcan_pccard_irqhandler, int irq, void *dev_id, str
   return PCAN_IRQ_RETVAL(ret);
 }
 
-#ifdef XENOMAI
-static int pccard_req_irq(struct rtdm_dev_context *context)
-{
-  struct pcanctx_rt *ctx;
-  struct pcandev *dev = (struct pcandev *)NULL;
-#else
 static int pccard_req_irq(struct pcandev *dev)
 {
-#endif
   int err;
   
   DPRINTK(KERN_DEBUG "%s: pccard_req_irq()\n", DEVICE_NAME);
   
-  #ifdef XENOMAI
-  ctx = (struct pcanctx_rt *)context->dev_private;
-  dev = ctx->dev;
-  #endif
-  
   if (dev->wInitStep == 4)
   {
-    #ifdef XENOMAI
-    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, pcan_pccard_irqhandler_rt,
-            RTDM_IRQTYPE_SHARED | RTDM_IRQTYPE_EDGE, context->device->proc_name, ctx)))
-      return err;
-    #else
-    if ((err = request_irq(dev->port.pccard.wIrq, pcan_pccard_irqhandler, SA_INTERRUPT | SA_SHIRQ, "pcan", dev)))
-      return err;
-    #endif
-    
+    if ((err = request_irq(dev->port.pccard.wIrq, pcan_pccard_irqhandler, IRQF_DISABLED | IRQF_SHARED, "pcan", dev)))
+      return err; 
     dev->wInitStep = 5;
   }
   
@@ -474,9 +441,7 @@ static void pccard_free_irq(struct pcandev *dev)
   
   if (dev->wInitStep >= 5)
   {
-    #ifndef XENOMAI
     free_irq(dev->port.pccard.wIrq, dev);  
-    #endif
     dev->wInitStep = 4;
   }
 }
@@ -500,9 +465,6 @@ static int pccard_cleanup(struct pcandev *dev)
               pccard_devices--; 
       case 2: dev->ucPhysicallyInstalled = 0;
               list_del(&dev->list);
-              #ifdef XENOMAI
-              xenomai_unregister_device(dev);
-              #endif
       case 1: 
               #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
               DPRINTK(KERN_DEBUG "%s: release_region(PCCARD_PORT_SIZE)\n", DEVICE_NAME);
@@ -694,9 +656,6 @@ int pccard_create_all_devices(PCAN_PCCARD *card)
         chn++;
         card->dev[i] = dev;
         
-        #ifdef XENOMAI
-        xenomai_register_device(dev);
-        #endif
         #ifdef NETDEV_SUPPORT
         pcan_netdev_register(dev);
         #endif
@@ -717,10 +676,8 @@ int pccard_create_all_devices(PCAN_PCCARD *card)
     // enable power to connector
     pccard_enable_CAN_power(card);
   
-    #ifndef XENOMAI
     pccard_start_activity_scanner(card); // start scanning card's acitvity to control LEDs
-    #endif
-    
+      
     return 0;
   }
   
@@ -738,12 +695,9 @@ void pccard_release_all_devices(PCAN_PCCARD *card)
   if (card)
   {
     struct pcandev *dev;
-    int i;
-    
-    #ifndef XENOMAI    
+    int i;    
     pccard_stop_activity_scanner(card);  // stop scanning card's acitvity to control LEDs
-    #endif
-    
+   
     if (pccard_plugged(card))
        pccard_disable_CAN_power(card);
 
@@ -761,5 +715,3 @@ void pccard_release_all_devices(PCAN_PCCARD *card)
     #endif
   }
 }
-
-// fin

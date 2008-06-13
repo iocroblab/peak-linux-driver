@@ -2,7 +2,7 @@
 #define __PCAN_COMMON_H__
 
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2008  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -35,7 +35,7 @@
 // global defines to include in all files this module is made of
 // ! this must always the 1st include in all files !
 //
-// $Id: pcan_common.h 513 2007-06-01 12:10:28Z khitschler $
+// $Id: pcan_common.h 543 2008-02-20 11:54:03Z khitschler $
 //
 //****************************************************************************
 
@@ -66,9 +66,19 @@
   #endif
 #endif
 
-// support for XENOMAI
-#ifdef XENOMAI
-  #include <xenomai/rtdm/rtdm_driver.h>
+#ifndef NO_RT
+  #include <rtdm/rtdm_driver.h>
+  #include <asm/div64.h>
+  static inline void rt_gettimeofday(struct timeval *tv) 
+  {
+      nanosecs_abs_t current_time = rtdm_clock_read(); 
+      tv->tv_usec = (do_div(current_time, 1000000000) / 1000);
+      tv->tv_sec = current_time;
+  	  
+  }
+  #define DO_GETTIMEOFDAY(tv) rt_gettimeofday(&tv)
+#else
+  #define DO_GETTIMEOFDAY(tv) do_gettimeofday(&tv)
 #endif
 
 // support for PARPORT_SUBSYSTEM
@@ -105,8 +115,8 @@
   #define IRQ_RETVAL(x)
 #endif
 
-// IRQ's return val for Linux and Xenomai 
-#ifdef XENOMAI
+// IRQ's return val for Linux and RealTime 
+#ifndef NO_RT
   #define PCAN_IRQ_RETVAL(x) x
 #else
   #define PCAN_IRQ_RETVAL(x) IRQ_RETVAL(x)
@@ -134,6 +144,12 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 #define UDEV_SUPPORT
 #endif
 
+// follow current interrupt definition changes
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
+#define IRQF_DISABLED SA_INTERRUPT
+#define IRQF_SHARED   SA_SHIRQ
+#endif
+
 // different data sink alternatives
 #ifdef NETDEV_SUPPORT
 #define pcan_xxxdev_rx(dev, frame, time) pcan_netdev_rx(dev, frame, time) 
@@ -147,6 +163,6 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous 
 // with SVN 
-#define CURRENT_RELEASE "Release_20070601_n"  // $name$
+#define CURRENT_RELEASE "Release_20080220_n"  // $name$
 
 #endif // __PCAN_COMMON_H__

@@ -27,14 +27,14 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //****************************************************************************
 //
 // all parts to handle device interface specific for pcan-pci
 //
-// $Id: pcan_pci.h 447 2007-01-28 14:05:50Z khitschler $
+// $Id: pcan_pci.h 518 2007-08-08 07:40:31Z edouard $
 //
 //****************************************************************************
 
@@ -46,4 +46,6 @@
 // DEFINES
 int  pcan_search_and_create_pci_devices(void);
 
+void pcan_pci_clear_stored_interrupt(struct pcandev *dev);
+void pcan_pci_enable_interrupt(struct pcandev *dev);
 #endif // __PCAN_PCI_H__

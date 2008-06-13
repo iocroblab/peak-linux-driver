@@ -1,11 +1,8 @@
-#ifndef __PCAN_ISA_H__
-#define __PCAN_ISA_H__
-
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com
+// www.peak-system.com 
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,26 +24,59 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
-//****************************************************************************
-
-//****************************************************************************
-//
-// all parts to handle interface specific parts for pcan-isa
-//
-// $Id: pcan_isa.h 517 2007-07-09 09:40:42Z edouard $
 //
 //****************************************************************************
 
 //****************************************************************************
-// INCLUDES
-#include <src/pcan_main.h>
+//
+// all parts to handle device interface specific for pcan-pci
+//
+// $Id: pcan_pci_rt.c $
+//
+//****************************************************************************
 
 //****************************************************************************
 // DEFINES
-int  pcan_create_isa_devices(char* type, u32 io, u16 irq);
-#ifdef NO_RT
-void pcan_create_isa_shared_irq_lists(void);
-#endif
+#define PCI_FREE_IRQ()
 
-#endif // __PCAN_ISA_H__
+//****************************************************************************
+// CODE
+
+// a special frame around the default irq handler
+static int pcan_pci_irqhandler_rt(rtdm_irq_t *irq_context)
+{
+  struct pcanctx_rt *ctx;
+  struct pcandev *dev;
+  int ret;
+
+  ctx = rtdm_irq_get_arg(irq_context, struct pcanctx_rt);
+  dev = ctx->dev;
+
+  ret = sja1000_irqhandler_rt(irq_context);
+
+  pcan_pci_clear_stored_interrupt(dev);
+
+  return PCAN_IRQ_RETVAL(ret);
+}
+
+// all about interrupt handling
+static int pcan_pci_req_irq(struct rtdm_dev_context *context)
+{
+  struct pcanctx_rt *ctx;
+  struct pcandev *dev = (struct pcandev *)NULL;
+  int err;
+
+  ctx = (struct pcanctx_rt *)context->dev_private;
+  dev = ctx->dev;
+
+  if (dev->wInitStep == 5)
+  {
+    if ((err = rtdm_irq_request(&ctx->irq_handle, ctx->irq, pcan_pci_irqhandler_rt, RTDM_IRQTYPE_SHARED | RTDM_IRQTYPE_EDGE, context->device->proc_name, ctx)))
+    {
+      return err;
+    }
+    pcan_pci_enable_interrupt(dev);
+  }
+
+  return 0;
+}

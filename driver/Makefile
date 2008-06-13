@@ -1,5 +1,5 @@
 #****************************************************************************
-# Copyright (C) 2001-2007  PEAK System-Technik GmbH
+# Copyright (C) 2001-2008  PEAK System-Technik GmbH
 #
 # linux@peak-system.com
 # www.peak-system.com
@@ -12,7 +12,7 @@
 #
 # Makefile for Peak CAN interface drivers (ISA, PC/104, PCI, DONGLE, USB, PCCARD)
 #
-# $Id: Makefile 488 2007-03-18 21:39:50Z khitschler $
+# $Id: Makefile 542 2008-02-19 08:10:31Z edouard $
 #
 #****************************************************************************
 
@@ -36,8 +36,9 @@
 # ISA=NO_ISA_SUPPORT        or ISA_SUPPORT        compile for use with PCAN-ISA or PCAN-104
 # PCC=NO_PCCARD_SUPPORT     or PCCARD_SUPPORT     compile for use with PCAN-PCCARD
 # NET=NO_NETDEV_SUPPORT     or NETDEV_SUPPORT     compile for use as CAN network device (AF_CAN)
+#     ... or use AUTO_NETDEV_SUPPORT to enable netdev configuration depending on kernel CONFIG_CAN (kernel 2.6.25+)
 # VERBOSE=0                 or 1                  switch Makefile verbosity on
-# RT=XENOMAI                or NO_XENOMAI         compile for use on XENOMAI RTOS
+# RT=XENOMAI                or RTAI or NO_RT      compile for use on XENOMAI or RTAI RTOS
 #
 # please the first time do a make clean; make
 #
@@ -101,8 +102,8 @@ PCI     = PCI_SUPPORT
 DNG     = DONGLE_SUPPORT
 ISA     = ISA_SUPPORT
 PCC     = PCCARD_SUPPORT
-NET     = NO_NETDEV_SUPPORT
-RT      = NO_XENOMAI
+NET     = AUTO_NETDEV_SUPPORT
+RT      = NO_RT
 
 VERBOSE = 0
 
@@ -129,11 +130,54 @@ USB = NO_USB_SUPPORT
 PCC = NO_PCCARD_SUPPORT
 
 SKIN = xeno
-XENO_DIR          ?= /usr/xenomai
-XENO_CONFIG       ?= $(XENO_DIR)/bin/xeno-config
-XENO_LIB_DIR      ?= $(shell $(XENO_CONFIG) --library-dir)
-XENO_CFLAGS       ?= $(shell $(XENO_CONFIG) --$(SKIN)-cflags)
+RT_DIR          ?= /usr/xenomai
+RT_CONFIG       ?= $(RT_DIR)/bin/xeno-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir)
+RT_CFLAGS       ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
 endif
+
+#****************************************************************************
+
+ifeq ($(RT), RTAI)
+#****************************************************************************
+# Define flags for RTAI installation only
+#
+USB = NO_USB_SUPPORT
+PCC = NO_PCCARD_SUPPORT
+
+SKIN = module
+RT_DIR          ?= /usr/realtime
+RT_CONFIG       ?= $(RT_DIR)/bin/rtai-config
+RT_LIB_DIR      ?= $(shell $(RT_CONFIG) --library-dir)
+RT_CFLAGS       ?= $(shell $(RT_CONFIG) --$(SKIN)-cflags)
+endif
+
+#****************************************************************************
+
+ifeq ($(NET), AUTO_NETDEV_SUPPORT)
+#****************************************************************************
+# Auto configure netdev support when kernel is compiled with CONFIG_CAN
+#
+
+HASAUTOCONF_H := $(shell if test -f $(KERNEL_LOCATION)/include/linux/autoconf.h ; then echo yes ; else echo no; fi )
+
+ifeq ($(HASAUTOCONF_H),no)
+$(error "AUTO_NETDEV_SUPPORT: Can't find $(KERNEL_LOCATION)/include/linux/autoconf.h !")
+else
+
+SOCKETCAN := $(shell cpp -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/autoconf.h | grep -c CONFIG_CAN)
+
+ifeq ($(SOCKETCAN),0)
+NET = NO_NETDEV_SUPPORT
+else
+NET = NETDEV_SUPPORT
+endif
+
+endif
+endif
+
+#****************************************************************************
+
 
 #****************************************************************************
 # preparation what to build or what to KBUILD
@@ -182,7 +226,7 @@ obj-m := pcan.o
 #****************************************************************************
 # add flags to standard flags
 #
-CPPFLAGS += -I$(IWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(XENO_CFLAGS)
+_CFLAGS += -I$(IWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it in another way for kernels less than 2.6.5
@@ -191,9 +235,9 @@ USESUBDIRS  := $(shell if [ $(KVERSION) -eq 2 ] && [ $(KPATCHLEVEL) -eq 6 ] && [
                  then echo "yes" ; else echo "no"  ; fi)
 
 ifeq ($(USESUBDIRS),yes)
-CMDLINE = $(MAKE) -C $(KERNSRC) SUBDIRS=$(PWD) V=$(VERBOSE) modules
+CMDLINE = $(MAKE) -C $(KERNSRC) M=$(PWD)                                V=$(VERBOSE) modules
 else
-CMDLINE = $(MAKE) -C $(KERNSRC) M=$(PWD)       V=$(VERBOSE) modules
+CMDLINE = $(MAKE) -C $(KERNSRC) SUBDIRS=$(PWD) EXTRA_CFLAGS="$(_CFLAGS)" V=$(VERBOSE) modules
 endif # <<<<< USESUBDIRS >>>>>>
 
 #****************************************************************************
@@ -228,7 +272,7 @@ TARGET = pcan.o
 #****************************************************************************
 # compile flags
 #
-CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(XENO_CFLAGS)
+CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it
@@ -287,7 +331,10 @@ install:
 .PHONY : message
 message:
 	@ echo "***"
-	@ echo "*** Host machine kernel version=$(shell uname -r), Driver kernel version=$(VERSION), Path to kernel sources=$(KERNSRC), use KBUILD=$(USEKBUILD)"
+	@ echo "*** Host machine kernel version=$(shell uname -r)"
+	@ echo "*** Driver kernel version=$(VERSION)"
+	@ echo "*** Path to kernel sources=$(KERNSRC)"
+	@ echo "*** use KBUILD=$(USEKBUILD)"
 	@ echo "***"
 
 endif  # <<<<< HASVERSION_H >>>>>>
