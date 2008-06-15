@@ -36,19 +36,20 @@ configure-stamp:
 	dh_testdir
 	touch configure-stamp
 
-build-arch: configure-stamp  build-arch-stamp
-build-arch-stamp:
-	dh_testdir
-	$(MAKE) -C lib
-	$(MAKE) -C test
-	touch $@
+#build-arch: configure-stamp  build-arch-stamp
+#build-arch-stamp:
+#	dh_testdir
+#	$(MAKE) -C lib
+#	$(MAKE) -C test
+#	touch $@
 
 build-indep:  configure-stamp build-indep-stamp
 build-indep-stamp:
 	dh_testdir
 	touch $@
 
-build: build-arch build-indep
+#build: build-arch build-indep
+build: build-indep
 
 clean:
 	dh_testdir
@@ -77,7 +78,7 @@ install: build
 	cd debian/$(psource)/usr/src && tar -c modules | gzip -9 > $(sname).tar.gz && rm -rf modules
 
 	dh_install
-	dh_link -plibpcan0 usr/lib/libpcan.so.0.6 usr/lib/libpcan.so.0
+#	dh_link -plibpcan0 usr/lib/libpcan.so.0.6 usr/lib/libpcan.so.0
 	
 #	$(MAKE) -C lib DESTDIR=$(CURDIR)/debian/tmp install
 #	$(MAKE) -C test DESTDIR=$(CURDIR)/debian/tmp install
@@ -106,28 +107,29 @@ binary-indep: build install
 	dh_builddeb -i
 
 # Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir -s
-	dh_testroot -s
-	dh_installdocs -s
-	dh_installexamples -s
-	dh_installmenu -s
-	dh_installcron -s
-#	dh_installman -s
-	dh_installinfo -s
-	dh_installchangelogs  -s
-	dh_strip -s
-	dh_link -s
-	dh_compress -s
-	dh_fixperms -s
-	dh_makeshlibs -s
-	dh_installdeb -s
-	dh_shlibdeps -s
-	dh_gencontrol -s
-	dh_md5sums -s
-	dh_builddeb -s
+#binary-arch: build install
+#	dh_testdir -s
+#	dh_testroot -s
+#	dh_installdocs -s
+#	dh_installexamples -s
+#	dh_installmenu -s
+#	dh_installcron -s
+##	dh_installman -s
+#	dh_installinfo -s
+#	dh_installchangelogs  -s
+#	dh_strip -s
+#	dh_link -s
+#	dh_compress -s
+#	dh_fixperms -s
+#	dh_makeshlibs -s
+#	dh_installdeb -s
+#	dh_shlibdeps -s
+#	dh_gencontrol -s
+#	dh_md5sums -s
+#	dh_builddeb -s
 
-binary: binary-indep binary-arch
+#binary: binary-indep binary-arch
+binary: binary-indep
 
 # The kernel module targets called by module-assistant
  

@@ -4,12 +4,6 @@ peak-linux-driver for Debian
 Please see http://www.peak-system.com/linux for a description of the 
 peak-linux-driver software.
 
-The Debian peak-linux-driver source package provides these packages,
-
- 1) libpcan0, which provides the userspace library
- 2) libpcan-dev, which provides the userspace development files
- 2) peak-linux-driver-source, which provides the source for the kernel modules
-
 The peak-linux-driver-source package can be used in several ways,
 
  - Using the module-assistant(8) command to build a binary module package.
