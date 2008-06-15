@@ -46,7 +46,8 @@
 #****************************************************************************
 # please modify only here if your kernel path is elsewhere located
 #
-KERNEL_LOCATION = /usr/src/linux
+#KERNEL_LOCATION = /usr/src/linux
+KERNEL_LOCATION = $(KERNEL_DIR)
 
 #****************************************************************************
 # removed old kernel source path retrival for support of kernels < 2.2.18!
