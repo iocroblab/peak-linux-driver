@@ -10,7 +10,7 @@ Standards-Version: 3.7.3
 Package: libpcan-dev
 Section: libdevel
 Architecture: any
-Depends: libpcan0 (= ${Source-Version})
+Depends: libpcan0 (= ${binary:Version})
 Description: Peak System CAN driver development files
  PCAN development files.
 
@@ -27,7 +27,7 @@ Description: Peak System CAN driver library
 Package: peak-linux-driver-source
 Architecture: all
 Depends: module-assistant
-Recommends:  dpkg-dev, kernel-package, debhelper (>= 5.0.42), debconf-utils
+Recommends:  dpkg-dev, kernel-package, debhelper (>= 6)
 Description: Source for the peak-linux-driver kernel modules
  This package provides the driver source code for CAN-bus interface 
  products from PEAK-System. These allow communication with the 

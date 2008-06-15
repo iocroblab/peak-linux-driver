@@ -1,2 +1,2 @@
-usr/include/*
-usr/lib/lib*.so
+lib/libpcan.h usr/include
+#lib/libpcan.a usr/lib
