@@ -4,6 +4,8 @@ Priority: extra
 Maintainer: Teemu Ikonen <tpikonen@gmail.com>
 Build-Depends: debhelper (>= 6)
 Build-Depends-Indep: debconf-utils
+Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
+Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
 Homepage: http://www.peak-system.com/linux/
 Standards-Version: 3.7.3
 
