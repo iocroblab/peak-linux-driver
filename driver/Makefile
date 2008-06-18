@@ -111,7 +111,7 @@ VERBOSE = 0
 SRC     = src
 TEMP    = /tmp
 TMPWKD  = $(TEMP)/.pcan-workdir # tricky stuff to get around missing one-time shell command evaluation
-IWD     = $(shell cat $(TMPWKD))
+IWD     = $(shell [ -s $(TMPWKD) ] && cat $(TMPWKD) || pwd)
 PWD     = $(shell pwd)          # called from inside IDEs it differs from the used working directory
 
 PARMS   = type=isa,sp        # only for installer: please modify the install parameters according to your configuration
