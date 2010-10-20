@@ -1,35 +1,22 @@
 Source: peak-linux-driver
 Section: net
 Priority: extra
-Maintainer: Teemu Ikonen <tpikonen@gmail.com>
-Build-Depends: debhelper (>= 6)
-Build-Depends-Indep: debconf-utils
-Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
+Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
+Build-Depends: debhelper (>= 7.0.50~), bzip2
+Standards-Version: 3.8.4
+Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
 Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
-Homepage: http://www.peak-system.com/linux/
-Standards-Version: 3.7.3
+Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
 
-#Package: libpcan-dev
-#Section: libdevel
-#Architecture: any
-#Depends: libpcan0 (= ${binary:Version})
-#Description: Peak System CAN driver development files
-# PCAN development files.
-#
-#Package: libpcan0
-#Section: libs
-#Architecture: any
-#Depends: ${shlibs:Depends}, ${misc:Depends}
-#Replaces: libpcan6
-#Provides: libpcan6
-#Conflicts: libpcan6
-#Description: Peak System CAN driver library 
-# PCAN library and test programs.
+Package: peak-linux-driver-utils
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: PEAK-System CAN utils
+ This package provides the tools pcan_make_devices and wstress from PEAK-System.
 
 Package: peak-linux-driver-source
 Architecture: all
-Depends: module-assistant
-Recommends:  dpkg-dev, kernel-package, debhelper (>= 6)
+Depends: module-assistant, debhelper (>= 7), make, bzip2
 Description: Source for the peak-linux-driver kernel modules
  This package provides the driver source code for CAN-bus interface 
  products from PEAK-System. These allow communication with the 
