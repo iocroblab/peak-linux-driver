@@ -61,7 +61,6 @@ static int rt_dev_register(void)
   struct rt_device *rt_dev;
   int result = 0;
 
-  INIT_LIST_HEAD(&device_list);
   for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
   {
     dev = (struct pcandev *)ptr;
@@ -105,7 +104,6 @@ void rt_dev_unregister(void)
   {
     rtdm_dev_unregister(((struct rt_device *)ptr)->device, 1000);
   }
-  dev_unregister();
 }
 
 void rt_remove_dev_list(void)

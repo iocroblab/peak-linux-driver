@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2008 PEAK System-Technik GmbH
+// Copyright (C) 2001-2010 PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -37,9 +37,6 @@
 //
 //****************************************************************************
 
-#define SPIN_LOCK_IRQSAVE() unsigned long flags; \
-			    spin_lock_irqsave(&dev->port.dng.lock, flags)
-#define SPIN_UNLOCK_IRQRESTORE() spin_unlock_irqrestore(&dev->port.dng.lock, flags)
 #define PARPORT_REGISTER_DEVICE() return pcan_parport_register_device(p, dev)
 #define PARPORT_UNREGISTER_DEVICE() parport_unregister_device(dev->port.dng.pardev)
 
@@ -65,7 +62,7 @@ static int pcan_dongle_req_irq(struct pcandev *dev)
   {
     #ifndef PARPORT_SUBSYSTEM
     int err;
-    if ((err = request_irq(dev->port.dng.wIrq, sja1000_irqhandler, SA_INTERRUPT | SA_SHIRQ, "pcan", dev)))
+    if ((err = request_irq(dev->port.dng.wIrq, sja1000_irqhandler, IRQF_SHARED, "pcan", dev)))
       return err;
     #endif
 

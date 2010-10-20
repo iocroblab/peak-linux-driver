@@ -31,7 +31,7 @@
 //
 // pcan_usb-kernel.h - the inner usb parts header for pcan-usb support
 //
-// $Id: pcan_usb_kernel.h 447 2007-01-28 14:05:50Z khitschler $
+// $Id: pcan_usb_kernel.h 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
@@ -57,17 +57,19 @@
 
 //****************************************************************************
 // DEFINES
-int pcan_hw_SetCANOn(struct pcandev *dev);
-int pcan_hw_SetCANOff(struct pcandev *dev);
+int pcan_hw_setCANOn(struct pcandev *dev);
+int pcan_hw_setCANOff(struct pcandev *dev);
 
 int pcan_hw_Init(struct pcandev *dev, u16 btr0btr1, u8 bListenOnly);
+
 int pcan_hw_getSNR(struct pcandev *dev, u32 *pdwSNR);
+int pcan_hw_setSNR(struct pcandev *dev, u32 dwSNR);
+
+int pcan_hw_getDeviceNr(struct pcandev *dev, u8 *pucDeviceNr);
+int pcan_hw_setDeviceNr(struct pcandev *dev, u8 ucDeviceNr);
 
 int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength);
 int pcan_hw_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnDataLength);
-#ifdef NETDEV_SUPPORT
-int pcan_hw_EncodeMessage_frame(struct pcandev *dev, struct can_frame *cf, u8 *ucMsgPtr, int *pnDataLength);
-#endif
 
 #endif // __PCAN_USB_KERNEL_H__
 

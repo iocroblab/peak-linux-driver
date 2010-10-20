@@ -92,7 +92,7 @@ static void wait_until_fifo_empty(struct pcandev *dev, u32 mTime, struct pcanctx
 
   rtdm_lock_get_irqsave(&ctx->out_lock, lockctx);
 
-  fifo_not_empty = pcan_fifo_empty(&dev->writeFifo);
+  fifo_not_empty = !pcan_fifo_empty(&dev->writeFifo);
   if (fifo_not_empty)
     rtdm_event_clear(&ctx->empty_event);
 
@@ -192,9 +192,9 @@ int pcan_close_rt(struct rtdm_dev_context *context, rtdm_user_info_t *user_info)
 
   // restore device presence
   dev->ucPhysicallyInstalled = 1;
-  
-  // as wait_until_fifo_empty is not called in RT, 
-  // have to fix DataSendReady here, 
+
+  // as wait_until_fifo_empty is not called in RT,
+  // have to fix DataSendReady here,
   // so that device can transmit again
   atomic_set(&dev->DataSendReady, 1);
 
@@ -215,25 +215,18 @@ int pcan_ioctl_read_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPCA
 
   dev = ctx->dev;
 
-  // sleep until fifo is not empty
-  err = rtdm_event_wait(&ctx->in_event);
-  if (err)
-    goto fail;
-
   // if the device is plugged out
   if (!dev->ucPhysicallyInstalled)
     return -ENODEV;
 
-  rtdm_lock_get_irqsave(&ctx->in_lock, lockctx);
+  do{
+	  rtdm_lock_get_irqsave(&ctx->in_lock, lockctx);
 
-   // get data out of fifo
-  err = pcan_fifo_get(&dev->readFifo, (void *)&msg);
+	   // get data out of fifo
+	  err = pcan_fifo_get(&dev->readFifo, (void *)&msg);
 
-  // If fifo is NOT empty
-  if (pcan_fifo_empty(&dev->readFifo))
-    rtdm_event_signal(&ctx->in_event);
-
-  rtdm_lock_put_irqrestore(&ctx->in_lock, lockctx);
+	  rtdm_lock_put_irqrestore(&ctx->in_lock, lockctx);
+  }while(err == -ENODATA && !(err = rtdm_event_wait(&ctx->in_event)));
 
   if (err){
     goto fail;
@@ -247,7 +240,7 @@ int pcan_ioctl_read_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPCA
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_WRITE_MSG 
+// is called at user ioctl() with cmd = PCAN_WRITE_MSG
 int pcan_ioctl_write_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPCANMsg *usr)
 {
   int err = 0;
@@ -288,7 +281,7 @@ int pcan_ioctl_write_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPC
   err = pcan_fifo_put(&dev->writeFifo, &msg);
 
   // if fifo not full or can device ready to send
-  if (pcan_fifo_near_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady))
+  if (pcan_fifo_not_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady))
     rtdm_event_signal(&ctx->out_event);
   rtdm_lock_put_irqrestore(&ctx->out_lock, lockctx);
 
@@ -317,7 +310,7 @@ int pcan_ioctl_write_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPC
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS 
+// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS
 int pcan_ioctl_extended_status_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPEXTENDEDSTATUS *status)
 {
   int err = 0;
@@ -369,7 +362,7 @@ int pcan_ioctl_status_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TP
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_DIAG 
+// is called at user ioctl() with cmd = PCAN_DIAG
 int pcan_ioctl_diag_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPDIAG *diag)
 {
   int err = 0;
@@ -525,7 +518,7 @@ int pcan_ioctl_rt(struct rtdm_dev_context *context, rtdm_user_info_t *user_info,
     case PCAN_DIAG:
       err = pcan_ioctl_diag_rt(user_info, ctx, (TPDIAG *)arg);
       break;
-    case PCAN_INIT: 
+    case PCAN_INIT:
       err = pcan_ioctl_init_rt(user_info, ctx, (TPCANInit *)arg);
       break;
     case PCAN_BTR0BTR1:

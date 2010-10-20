@@ -34,7 +34,7 @@
 //
 // pcan_fifo.h - all about fifo buffer management
 //
-// $Id: pcan_fifo.h 447 2007-01-28 14:05:50Z khitschler $
+// $Id: pcan_fifo.h 595 2009-06-26 09:28:32Z khitschler $
 //
 //****************************************************************************
 
@@ -52,7 +52,7 @@ int pcan_fifo_init(register FIFO_MANAGER *anchor, void *bufferBegin, void *buffe
 int pcan_fifo_put(register FIFO_MANAGER *anchor, void *pvPutData);
 int pcan_fifo_get(register FIFO_MANAGER *anchor, void *pvPutData);
 int pcan_fifo_status(FIFO_MANAGER *anchor);
-int pcan_fifo_near_full(FIFO_MANAGER *anchor);
+int pcan_fifo_not_full(FIFO_MANAGER *anchor);
 int pcan_fifo_empty(FIFO_MANAGER *anchor);
 
 #endif // __PCAN_FIFO_H__

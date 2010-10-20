@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2006-2007  PEAK System-Technik GmbH
+// Copyright (C) 2006-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -24,14 +24,14 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //***************************************************************************
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 541 2008-02-18 17:48:03Z edouard $
+// $Id: pcan_pccard_kernel.c 613 2010-02-13 20:03:42Z khitschler $
 //
 //****************************************************************************
 
@@ -78,10 +78,10 @@
 
 #define CCR_CLK_MASK       0x03         // mask for clock code
 #define CCR_CLK16          0x00         // clk code
-#define CCR_CLK10          0x01         // 
-#define CCR_CLK21          0x02         // 
-#define CCR_CLK8           0x03         // 
-#define CCR_CLK_DEFAULT    CCR_CLK16    // set default clock       
+#define CCR_CLK10          0x01         //
+#define CCR_CLK21          0x02         //
+#define CCR_CLK8           0x03         //
+#define CCR_CLK_DEFAULT    CCR_CLK16    // set default clock
 
 #define CCR_RESET_MASK     0x01
 #define CCR_RESET          0x01         // put channel into reset
@@ -96,7 +96,7 @@
 #define CCR_LED0_SHIFT        4         // shift for channel 1
 #define CCR_LED1_SHIFT        6         // shift for channel 1
 
-#define CCR_DEFAULT       ((((u8)CCR_LED_OFF) << CCR_LED0_SHIFT) | (((u8)CCR_LED_OFF) << CCR_LED1_SHIFT) | CCR_CLK_DEFAULT) 
+#define CCR_DEFAULT       ((((u8)CCR_LED_OFF) << CCR_LED0_SHIFT) | (((u8)CCR_LED_OFF) << CCR_LED1_SHIFT) | CCR_CLK_DEFAULT)
 
 #define CSR_SPIBUSY        0x04         // set when SPI transaction is busy
 
@@ -119,7 +119,7 @@ static u16 pccard_devices = 0;
 // it seems that even when called after 'pccardctl eject' the card is seen as
 // already plugged out. So this function allways return 0.
 // BTW this does not matter since PCCARDs power is switched off during
-// plug out or 'pccardctl eject'. Therefore no de-initialisation of hardware 
+// plug out or 'pccardctl eject'. Therefore no de-initialisation of hardware
 // components are necessary.
 static inline int pccard_plugged(PCAN_PCCARD *card)
 {
@@ -144,7 +144,7 @@ static u8 pccard_readreg(struct pcandev *dev, u8 port) // read a register
 // write channel individual register
 static void pccard_writereg(struct pcandev *dev, u8 port, u8 data) // write a register
 {
-  outb(data, dev->port.pccard.dwPort + port) ; 
+  outb(data, dev->port.pccard.dwPort + port) ;
 }
 
 // read common register to both channels of a card
@@ -156,7 +156,7 @@ static inline u8 pccard_readreg_common(PCAN_PCCARD *card, u8 port) // read a reg
 // write common register to both channels of a card
 static inline void pccard_writereg_common(PCAN_PCCARD *card, u8 port, u8 data) // write a register
 {
-  outb(data, card->commonPort + port); 
+  outb(data, card->commonPort + port);
 }
 
 //****************************************************************************
@@ -186,10 +186,10 @@ static int pccard_write_eeprom(PCAN_PCCARD *card, u16 addr, u8 val)
   pccard_writereg_common(card, SPIINS, 0x06); // WREN
   if ((err = wait_while_spi_engine_busy(card)) < 0)
     goto fail;
-    
+
   // warte, bis WEL gesetzt ist
   counter = MAX_LOOP_CYCLES;
-  do 
+  do
   {
     pccard_writereg_common(card, SPIINS, 0x05); // RDSR == Read status
     if ((err = wait_while_spi_engine_busy(card)) < 0)
@@ -205,7 +205,7 @@ static int pccard_write_eeprom(PCAN_PCCARD *card, u16 addr, u8 val)
   // Adresse und Data setzen
   pccard_writereg_common(card, SPIADR, addr & 0xff);
   pccard_writereg_common(card, SPIDATO, val);
-  
+
   // Instruction WRITE
   pccard_writereg_common(card, SPIINS, ((addr & 0x100) ? 8 : 0) | 0x02); // WRITE mit bit3 = Addr8
   if ((err = wait_while_spi_engine_busy(card)) < 0)
@@ -213,7 +213,7 @@ static int pccard_write_eeprom(PCAN_PCCARD *card, u16 addr, u8 val)
 
   // warte, bis Schreiben abgeschlossen
   counter = MAX_LOOP_CYCLES;
-  do 
+  do
   {
     pccard_writereg_common(card, SPIINS, 0x05); // RDSR == Read status
     if ((err = wait_while_spi_engine_busy(card)) < 0)
@@ -222,7 +222,7 @@ static int pccard_write_eeprom(PCAN_PCCARD *card, u16 addr, u8 val)
   } while ((status & 0x01) && counter--); // warte, bis WIP (Write In Progress) 0.
   if (counter <= 0)
     err = -EIO;
-  
+
   fail:
   if (err)
   {
@@ -239,14 +239,14 @@ static inline void pccard_show_firmware_version(PCAN_PCCARD *card)
 {
   u8 fw_major = pccard_readreg_common(card, FW_MAJOR);
   u8 fw_minor = pccard_readreg_common(card, FW_MINOR);
-  
+
   printk(KERN_INFO "%s: pccard firmware %d.%d\n", DEVICE_NAME, fw_major, fw_minor);
 }
 
 // init CCR settings
 static inline void pccard_initreg_common(PCAN_PCCARD *card)
 {
-  pccard_writereg_common(card, CCR, CCR_DEFAULT);  
+  pccard_writereg_common(card, CCR, CCR_DEFAULT);
 }
 
 // hard reset only one channel to its default settings
@@ -254,9 +254,9 @@ static inline void pccard_channel_reset(PCAN_PCCARD *card, int nChannel)
 {
   u8 data;
   u8 shift = (nChannel) ? CCR_RESET1_SHIFT : CCR_RESET0_SHIFT;
-  
+
   DPRINTK(KERN_DEBUG "%s: pccard_channel_reset(%d)\n", DEVICE_NAME, nChannel);
-      
+
   data = pccard_readreg_common(card, CCR);
   data &= ~(CCR_RESET_MASK << shift);
   data |=  (CCR_RESET      << shift);
@@ -266,7 +266,7 @@ static inline void pccard_channel_reset(PCAN_PCCARD *card, int nChannel)
   data = pccard_readreg_common(card, CCR);
   data &= ~(CCR_RESET_MASK << shift);
   data &= ~(CCR_RESET      << shift);
-  pccard_writereg_common(card, CCR, data);  
+  pccard_writereg_common(card, CCR, data);
   mdelay(10); // wait until reset has settled
 }
 
@@ -275,14 +275,14 @@ static inline void pccard_set_LED(PCAN_PCCARD *card, int nChannel, u8 mode)
 {
   u8 data;
   u8 shift = (nChannel) ? CCR_LED1_SHIFT : CCR_LED0_SHIFT;
-  
+
   mode &= CCR_LED_MASK;
-  
+
   data = pccard_readreg_common(card, CCR);
-  
+
   // write only if something has changed
   if (((data >> shift) & CCR_LED_MASK) != mode)
-  {  
+  {
     data &= ~(CCR_LED_MASK << shift);
     data |=  (mode         << shift);
     pccard_writereg_common(card, CCR, data);
@@ -312,7 +312,7 @@ static void pccard_activity_scanner(unsigned long ptr)
   PCAN_PCCARD *card = (PCAN_PCCARD *)ptr;
   struct pcandev *dev;
   int i;
-  
+
   // DPRINTK(KERN_DEBUG "%s: pccard_activity_scanner(%p)\n", DEVICE_NAME, card);
 
   for (i = 0; i < PCCARD_CHANNELS; i++)
@@ -321,21 +321,21 @@ static void pccard_activity_scanner(unsigned long ptr)
     if (dev)
     {
       u8 state = dev->ucActivityState;
-      
+
       switch(state)
       {
         case ACTIVITY_XMIT:
           dev->ucActivityState = ACTIVITY_IDLE;
-          pccard_set_LED(card, i, CCR_LED_FAST);    
+          pccard_set_LED(card, i, CCR_LED_FAST);
           break;
         case ACTIVITY_IDLE:
-          pccard_set_LED(card, i, CCR_LED_SLOW);    
+          pccard_set_LED(card, i, CCR_LED_SLOW);
           break;
         case ACTIVITY_INITIALIZED:
-          pccard_set_LED(card, i, CCR_LED_ON);    
+          pccard_set_LED(card, i, CCR_LED_ON);
           break;
         default:
-          pccard_set_LED(card, i, CCR_LED_OFF);    
+          pccard_set_LED(card, i, CCR_LED_OFF);
           break;
       }
     }
@@ -346,7 +346,7 @@ static void pccard_activity_scanner(unsigned long ptr)
   // restart timer
   if (card->run_activity_timer_cyclic)
   {
-    card->activity_timer.expires  = jiffies + HZ; 
+    card->activity_timer.expires  = jiffies + HZ;
     add_timer(&card->activity_timer);
   }
 }
@@ -354,12 +354,12 @@ static void pccard_activity_scanner(unsigned long ptr)
 static void pccard_start_activity_scanner(PCAN_PCCARD *card)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_start_activity_scanner(%p)\n", DEVICE_NAME, card);
-  
+
   init_timer(&card->activity_timer);
   card->activity_timer.function = pccard_activity_scanner;
   card->activity_timer.data     = (unsigned long)card;
   card->activity_timer.expires  = jiffies + HZ; // one second
-  
+
   card->run_activity_timer_cyclic = 1;
   add_timer(&card->activity_timer);
 }
@@ -367,7 +367,7 @@ static void pccard_start_activity_scanner(PCAN_PCCARD *card)
 static void pccard_stop_activity_scanner(PCAN_PCCARD *card)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_stop_activity_scanner(%p)\n", DEVICE_NAME, card);
-  
+
   card->run_activity_timer_cyclic = 0;
   del_timer_sync(&card->activity_timer);
 }
@@ -379,69 +379,68 @@ static void pccard_stop_activity_scanner(PCAN_PCCARD *card)
 static irqreturn_t IRQHANDLER(pcan_pccard_irqhandler, int irq, void *dev_id, struct pt_regs *regs)
 {
   struct pcandev *dev = (struct pcandev *)dev_id;
-  PCAN_PCCARD *card   = dev->port.pccard.card;
-  int ret             = 0;
-  u16 stop_count      = 100; // prevent to loop infinitely to get all shared interrupts cleared
+  PCAN_PCCARD *card = dev->port.pccard.card;
+  int ret = 0;
+  u16 stop_count = 100; // prevent to loop infinitely to get all shared interrupts cleared
   u16 loop_count;
   u16 index;
-  
+
   // DPRINTK(KERN_DEBUG "%s: pcan_pccard_irqhandler(%p)\n", DEVICE_NAME, dev_id);
-  
+
   for (index = 0, loop_count = 0; loop_count < PCCARD_CHANNELS; index++)
   {
-    if ((dev = card->dev[index % PCCARD_CHANNELS])) // consider singel channel cards, too
-    {/* XXX TODO */
-
-      int tmpret = IRQHANDLER(sja1000_base_irqhandler, irq, dev, regs);
+    if ((dev = card->dev[index % PCCARD_CHANNELS])) // consider single channel cards, too
+    {
+      int tmpret= IRQHANDLER(sja1000_base_irqhandler, irq, dev, regs);
 
       if (!tmpret)
-        	loop_count++;
+        loop_count++;
       else
       {
-	ret = 1; 
+        ret = 1;
 
         loop_count = 0; // restart, since all channels must respond in one pass with no interrupt pending
       }
-        
+
       if (!stop_count--)
       {
-        printk(KERN_ERR "%s: Too much PCCARD interrupt load, processing halted!\n", DEVICE_NAME);        
+        printk(KERN_ERR "%s: Too much PCCARD interrupt load, processing halted!\n", DEVICE_NAME);
         break;
-      }      
+      }
     }
     else
       loop_count++;
-      
+
     if (loop_count == PCCARD_CHANNELS)
       break;
   }
-  
+
   return PCAN_IRQ_RETVAL(ret);
 }
 
 static int pccard_req_irq(struct pcandev *dev)
 {
   int err;
-  
+
   DPRINTK(KERN_DEBUG "%s: pccard_req_irq()\n", DEVICE_NAME);
-  
+
   if (dev->wInitStep == 4)
   {
-    if ((err = request_irq(dev->port.pccard.wIrq, pcan_pccard_irqhandler, IRQF_DISABLED | IRQF_SHARED, "pcan", dev)))
-      return err; 
+    if ((err = request_irq(dev->port.pccard.wIrq, pcan_pccard_irqhandler, IRQF_SHARED, "pcan", dev)))
+      return err;
     dev->wInitStep = 5;
   }
-  
+
   return 0;
 }
 
 static void pccard_free_irq(struct pcandev *dev)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_free_irq()\n", DEVICE_NAME);
-  
+
   if (dev->wInitStep >= 5)
   {
-    free_irq(dev->port.pccard.wIrq, dev);  
+    free_irq(dev->port.pccard.wIrq, dev);
     dev->wInitStep = 4;
   }
 }
@@ -451,21 +450,22 @@ static void pccard_free_irq(struct pcandev *dev)
 static int pccard_cleanup(struct pcandev *dev)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_cleanup()\n", DEVICE_NAME);
-  
+
   if (dev)
   {
     switch(dev->wInitStep)
     {
-      case 5: pccard_free_irq(dev); 
+      case 5: pccard_free_irq(dev);
       case 4: dev->ucActivityState = ACTIVITY_NONE; // temporary
+              pcan_device_node_destroy(dev);
               #ifdef NETDEV_SUPPORT
               pcan_netdev_unregister(dev);
               #endif
       case 3: pcan_drv.wDeviceCount--;
-              pccard_devices--; 
+              pccard_devices--;
       case 2: dev->ucPhysicallyInstalled = 0;
               list_del(&dev->list);
-      case 1: 
+      case 1:
               #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
               DPRINTK(KERN_DEBUG "%s: release_region(PCCARD_PORT_SIZE)\n", DEVICE_NAME);
               release_region(dev->port.pccard.dwPort, PCCARD_PORT_SIZE);
@@ -474,10 +474,10 @@ static int pccard_cleanup(struct pcandev *dev)
               dev->filter = NULL;
               dev->wInitStep = 0;
               DPRINTK(KERN_DEBUG "%s: kfree(PCANDEV=0x%p)\n", DEVICE_NAME, dev);
-              kfree(dev); 
+              kfree(dev);
               dev = NULL;
     }
-  } 
+  }
   return 0;
 }
 
@@ -486,7 +486,7 @@ static int pccard_cleanup(struct pcandev *dev)
 static int pccard_open(struct pcandev *dev)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_open()\n", DEVICE_NAME);
-  
+
   dev->ucActivityState = ACTIVITY_IDLE;
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
   dev->port.pccard.card->pcc_dev->open++;
@@ -499,7 +499,7 @@ static int pccard_open(struct pcandev *dev)
 static int pccard_release(struct pcandev *dev)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_release()\n", DEVICE_NAME);
-  
+
   dev->ucActivityState = ACTIVITY_INITIALIZED;
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
   if (dev->port.pccard.card->pcc_dev->open > 0)
@@ -518,9 +518,9 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   struct pcandev *dev;
   PCCARD_PORT    *p;
   int err = 0;
-  
+
   DPRINTK(KERN_DEBUG "%s: pccard_create_single_device(%d, 0x%04x, %d)\n", DEVICE_NAME, nChannel, dwPort, wIrq);
-  
+
   // allocate memory for my device
   if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
   {
@@ -540,15 +540,12 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   dev->device_open      = sja1000_open;
   dev->device_release   = sja1000_release;
   dev->device_write     = sja1000_write;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = sja1000_write_frame;
-  #endif
-  
+
   // init process wait queues
   init_waitqueue_head(&dev->read_queue);
   init_waitqueue_head(&dev->write_queue);
-    
-  // set this before any instructions, fill struct pcandev, part 1 
+
+  // set this before any instructions, fill struct pcandev, part 1
   dev->readreg     = pccard_readreg;
   dev->writereg    = pccard_writereg;
   dev->cleanup     = pccard_cleanup;
@@ -556,19 +553,19 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   dev->free_irq    = pccard_free_irq;
   dev->open        = pccard_open;
   dev->release     = pccard_release;
-  dev->nMinor      = PCCARD_MINOR_BASE + pccard_devices; 
+  dev->nMinor      = PCCARD_MINOR_BASE + pccard_devices;
   dev->filter      = pcan_create_filter_chain();
-  
+
   dev->props.ucExternalClock = 1;
   dev->props.ucMasterDevice  = (nChannel) ? CHANNEL_SLAVE : CHANNEL_MASTER;
-           
+
   // reject illegal combination
   if (!dwPort || !wIrq)
   {
     err = -EINVAL;
     goto fail;
   }
-  
+
   // fill struct pcandev, hardware specfic parts
   p           = &dev->port.pccard;
   p->dwPort   = dwPort;
@@ -586,25 +583,25 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   dev->wInitStep = 1;
 
   // base init of hardware - reset channel
-  pccard_channel_reset(card, nChannel); 
-  
+  pccard_channel_reset(card, nChannel);
+
   // probe hardware
   if ((err = sja1000_probe(dev)))
-    goto fail;  
-  
+    goto fail;
+
   // add into list of devices and assign the device as plugged in
   dev->ucPhysicallyInstalled = 1;
-  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list       
+  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
   dev->wInitStep = 2;
-  
+
   // increment device counts
   pcan_drv.wDeviceCount++;
-  pccard_devices++; 
+  pccard_devices++;
   dev->wInitStep = 3;
-    
+
   dev->ucActivityState = ACTIVITY_INITIALIZED;
   dev->wInitStep = 4;
-  
+
   printk(KERN_INFO "%s: pccard device minor %d found\n", DEVICE_NAME, dev->nMinor);
 
   return dev;
@@ -612,7 +609,7 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   fail:
   pccard_cleanup(dev);
   DPRINTK(KERN_INFO "%s: pccard_create_single_device(%d) failed! (%d)\n", DEVICE_NAME, nChannel, err);
-  
+
   return NULL;
 }
 
@@ -621,47 +618,48 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
 int pccard_create_all_devices(PCAN_PCCARD *card)
 {
   int err = 0;
-  
+
   DPRINTK(KERN_DEBUG "%s: pccard_create_all_devices()\n", DEVICE_NAME);
-    
+
   if (card)
   {
     int    chn  = 0;
     struct pcandev *dev;
     int    i;
-    
+
     // fill card structure
     card->commonPort = card->basePort + PCCARD_COMMON;
-  
+
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
     // request commonly used io area
-    
+
     DPRINTK(KERN_DEBUG "%s: ___request_region(PCCARD_COMMON_SIZE)\n", DEVICE_NAME);
     err = ___request_region(card->commonPort, PCCARD_COMMON_SIZE, DEVICE_NAME);
     if (err)
       goto fail;
     #endif
-      
+
     // init common registers
     pccard_initreg_common(card);
-      
+
     for (i = 0; i < PCCARD_CHANNELS; i++)
     {
       card->dev[i] = NULL;
-      
+
       // probe devices and if successfully create device structues - channel 0
       dev = pccard_create_single_device(card, i, card->basePort + i * PCCARD_CHANNEL_OFF, card->commonIrq);
-      if (dev) 
+      if (dev)
       {
         chn++;
         card->dev[i] = dev;
-        
+
         #ifdef NETDEV_SUPPORT
         pcan_netdev_register(dev);
         #endif
+        pcan_device_node_create(dev);
       }
     }
-    
+
     // no usable channel found
     if (!chn)
     {
@@ -671,16 +669,16 @@ int pccard_create_all_devices(PCAN_PCCARD *card)
     }
 
     // get version of hardware to log
-    pccard_show_firmware_version(card);  
-  
+    pccard_show_firmware_version(card);
+
     // enable power to connector
     pccard_enable_CAN_power(card);
-  
+
     pccard_start_activity_scanner(card); // start scanning card's acitvity to control LEDs
-      
+
     return 0;
   }
-  
+
   fail:
   DPRINTK(KERN_DEBUG "%s: pccard_create_all_devices(%d) failed!\n", DEVICE_NAME, err);
   return err;
@@ -691,13 +689,13 @@ int pccard_create_all_devices(PCAN_PCCARD *card)
 void pccard_release_all_devices(PCAN_PCCARD *card)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_release_all_devices(0x%p)\n", DEVICE_NAME, card);
-  
+
   if (card)
   {
     struct pcandev *dev;
-    int i;    
+    int i;
     pccard_stop_activity_scanner(card);  // stop scanning card's acitvity to control LEDs
-   
+
     if (pccard_plugged(card))
        pccard_disable_CAN_power(card);
 
@@ -708,7 +706,7 @@ void pccard_release_all_devices(PCAN_PCCARD *card)
       pccard_cleanup(dev);
       card->dev[i] = NULL;
     }
-    
+
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
     DPRINTK(KERN_DEBUG "%s: release_region(PCCARD_COMMON_SIZE)\n", DEVICE_NAME);
     release_region(card->commonPort, PCCARD_COMMON_SIZE);

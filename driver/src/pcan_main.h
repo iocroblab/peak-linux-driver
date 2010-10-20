@@ -2,7 +2,7 @@
 #define __PCAN_MAIN_H__
 
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -27,7 +27,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Philipp Baer (philipp.baer@informatik.uni-ulm.de)
 //                Marc Sowen (Marc.Sowen@ibeo-as.com)
@@ -37,7 +37,7 @@
 //
 // pcan_main.h - global defines to include in all files this module is made of
 //
-// $Id: pcan_main.h 535 2008-02-11 20:36:03Z ohartkopp $
+// $Id: pcan_main.h 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
@@ -147,10 +147,10 @@ struct pcanctx_rt;
 #define CAN_ERROR_PASSIVE    1          // receive only state
 #define CAN_BUS_OFF          2          // switched off from Bus
 
-typedef struct chn_props                                   // this structure holds various channel properties 
+typedef struct chn_props                                   // this structure holds various channel properties
 {
   u8 ucExternalClock : 1;                                  // this device is supplied with a external clock
-  u8 ucMasterDevice  : 2;                                  // this channel is a clock master, slave, single 
+  u8 ucMasterDevice  : 2;                                  // this channel is a clock master, slave, single
 } CHN_PROPS;
 
 // a helper for fast conversion between 'SJA1000' data ordering and host data order
@@ -194,7 +194,7 @@ typedef struct
 typedef struct
 {
   u32  dwPort;                                             // the port of the transport layer
-  u16  wIrq;                                               // the associated irq 
+  u16  wIrq;                                               // the associated irq
   #ifdef PARPORT_SUBSYSTEM
   struct pardevice *pardev;                                // points to the associated parallel port (PARPORT subsytem)
   #endif
@@ -210,9 +210,9 @@ typedef struct
 {
   struct list_head item;                                   // link anchor for a item with the same irq level
   struct pcandev   *dev;                                   // points to the device to be handled with the same irq level
-} SAME_IRQ_ITEM;            
+} SAME_IRQ_ITEM;
 
-typedef struct 
+typedef struct
 {
   struct list_head same_irq_items;                         // base of list of SAME_IRQ_ITEM's
   u16  same_irq_count;                                     // count of devices with the same irq level to handle
@@ -228,7 +228,7 @@ typedef struct
   SAME_IRQ_ITEM same;                                      // each ISA_PORT should belong to one SAME_IRQ_LIST
   SAME_IRQ_LIST anchor;                                    // the anchor for one irq level (not used with every ISA_PORT)
   SAME_IRQ_LIST *my_anchor;                                // points to the list of items for the same irq (SAME_IRQ_LIST)
-#endif  
+#endif
 } ISA_PORT;
 
 #ifdef PCCARD_SUPPORT
@@ -236,9 +236,9 @@ struct pcan_pccard;                                        // forward declaratio
 typedef struct
 {
   u32  dwPort;                                             // the port of the transport layer
-  u16  wIrq;                                               // the associated irq 
+  u16  wIrq;                                               // the associated irq
   int  nChannel;                                           // associated channel of the card
-  struct pcan_pccard *card;                                // points to the associated pccard 
+  struct pcan_pccard *card;                                // points to the associated pccard
 } PCCARD_PORT;
 #endif
 
@@ -312,14 +312,14 @@ typedef struct pcandev
   } port;
 
   struct chn_props props;                                  // various channel properties
-  
+
   u8   (*readreg)(struct pcandev *dev, u8 port);           // read a register
   void (*writereg)(struct pcandev *dev, u8 port, u8 data); // write a register
   int  (*cleanup)(struct pcandev *dev);                    // cleanup the interface
   int  (*open)(struct pcandev *dev);                       // called at open of a path
   int  (*release)(struct pcandev *dev);                    // called at release of a path
 #ifndef NO_RT
-  int  (*req_irq)(struct rtdm_dev_context *context);       // install the interrupt handler  
+  int  (*req_irq)(struct rtdm_dev_context *context);       // install the interrupt handler
 #else
   int  (*req_irq)(struct pcandev *dev);                    // install the interrupt handler
 #endif
@@ -333,14 +333,12 @@ typedef struct pcandev
   int  (*device_write)(struct pcandev *dev);               // write the device
 #endif
 
-
-  #ifdef NETDEV_SUPPORT
-  int  (*netdevice_write)(struct pcandev *dev, struct can_frame *cf); // write the device (netdevice only)
-  #endif
+  int  (*device_params)(struct pcandev *dev, TPEXTRAPARAMS *params); // a generalized interface to set
+                                                           // or get special parameters from the device
 
   wait_queue_head_t read_queue;                            // read process wait queue anchor
   wait_queue_head_t write_queue;                           // write process wait queue anchor
-  
+
   u8   bExtended;                                          // if 0, no extended frames are accepted
   int  nLastError;                                         // last error written
   int  busStatus;                                          // follows error status of CAN-Bus
@@ -359,6 +357,7 @@ typedef struct pcandev
   TPCANRdMsg   rMsg[READ_MESSAGE_COUNT];                   // all read messages
   TPCANMsg     wMsg[WRITE_MESSAGE_COUNT];                  // all write messages
   void *filter;                                            // a ID filter - currently associated to device
+  spinlock_t wlock;                                        // mutual exclusion lock for write invocation
 } PCANDEV;
 
 #ifndef NO_RT
@@ -401,34 +400,35 @@ typedef struct driverobj
   int nMajor;                                              // the major number of Pcan interfaces
   u16 wDeviceCount;                                        // count of found devices
   u16 wInitStep;                                           // driver specific init state
-  struct timeval sInitTime;                                // time in usec when init was called  
+  struct timeval sInitTime;                                // time in usec when init was called
   struct list_head devices;                                // base of list of devices
   u8  *szVersionString;                                    // pointer to the driver version string
-  
+
   #ifdef PCCARD_SUPPORT
   #ifndef LINUX_24
-  struct pcmcia_driver pccarddrv;                         // pccard driver structure 
+  struct pcmcia_driver pccarddrv;                         // pccard driver structure
   #endif
   #endif
-  
+
   #ifdef USB_SUPPORT
   struct usb_driver usbdrv;                                // usb driver structure
   #endif
-  
+
   #ifdef UDEV_SUPPORT
-  
+
   #ifdef PCI_SUPPORT
   struct pci_driver pci_drv;                               // pci driver structure
   #endif
-  
+
   #ifdef ISA_SUPPORT
   struct device_driver legacy_driver_isa;                  // legacy platform driver
   #endif
-  
+
   #ifdef DONGLE_SUPPORT
   struct device_driver legacy_driver_dongle;               // legacy platform driver
   #endif
-  
+
+  struct class *class;                                     // the associated class of pcan devices
   #endif // UDEV_SUPPORT
 } DRIVEROBJ;
 
@@ -460,6 +460,11 @@ void msg2frame(struct can_frame *cf, TPCANMsg *msg);
 int  pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv);
 
 void dev_unregister(void);
+#ifdef NO_RT
+void pcan_device_node_create(struct pcandev *dev);
+void pcan_device_node_destroy(struct pcandev *dev);
+#endif
+
 void remove_dev_list(void);
 
 #endif // __PCAN_MAIN_H__

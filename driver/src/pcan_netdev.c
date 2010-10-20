@@ -26,7 +26,7 @@
 //
 // pcan_netdev.c - CAN network device support functions
 //
-// $Id: pcan_netdev.c 525 2007-10-17 13:06:25Z ohartkopp $
+// $Id: pcan_netdev.c 607 2010-02-12 07:05:02Z ohartkopp $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>
@@ -40,6 +40,7 @@
 #include <linux/skbuff.h>
 #include <src/pcan_main.h>
 #include <src/pcan_fops.h>  /* pcan_open_path(), pcan_release_path() */
+#include <src/pcan_fifo.h>
 #include <src/pcan_netdev.h>
 
 //----------------------------------------------------------------------------
@@ -85,29 +86,19 @@ static int pcan_netdev_close(struct net_device *dev)
 }
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
 //----------------------------------------------------------------------------
 // AF_CAN netdevice: get statistics for device
 //----------------------------------------------------------------------------
-static struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
+struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
   struct can_priv *priv = netdev_priv(dev);
 
   /* TODO: read statistics from chip */
   return &priv->stats;
-}
+#else
+  return &dev->stats;
 #endif
-
-
-//----------------------------------------------------------------------------
-// AF_CAN netdevice: timeout handler for device
-//----------------------------------------------------------------------------
-static void pcan_netdev_tx_timeout(struct net_device *dev)
-{
-  struct net_device_stats *stats = dev->get_stats(dev);
-
-  stats->tx_errors++;
-  netif_wake_queue(dev);
 }
 
 
@@ -118,21 +109,65 @@ static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 {
   struct can_priv *priv = netdev_priv(dev);
   struct pcandev  *pdev = priv->pdev;
-  struct net_device_stats *stats = dev->get_stats(dev);
+  struct net_device_stats *stats = pcan_netdev_get_stats(dev);
   struct can_frame *cf = (struct can_frame*)skb->data;
+  int err = 0;
+  TPCANMsg msg;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, dev->name);
 
-  netif_stop_queue(dev);
-  atomic_set(&pdev->DataSendReady, 0); /* for pcan chardevice */
+  /*
+   * PCAN FIFO is full && not ready to write.
+   * This is a theoretical problem, when anyone else
+   * uses the chardev writing under load in parallel.
+   */
+  if (!pcan_fifo_not_full(&pdev->writeFifo) && (!atomic_read(&pdev->DataSendReady)))
+  {
+    stats->tx_dropped++;
+    goto free_out;
+  }
 
-  pdev->netdevice_write(pdev, cf); /* ignore return value */
+  // if the device is plugged out
+  if (!pdev->ucPhysicallyInstalled)
+    goto free_out;
+
+  // convert SocketCAN CAN frame to PCAN FIFO compatible format
+  frame2msg(cf, &msg);
+
+  // put data into fifo (mostly stolen from pcan_fops_linux.c ioctl() code)
+  err = pcan_fifo_put(&pdev->writeFifo, &msg);
+  if (!err)
+  {
+    // enqueue into FIFO was successful
+
+    // push a new transmission trough this xmit only if interrupt triggered push was stalled
+    mb();
+    if (atomic_read(&pdev->DataSendReady))
+    {
+      atomic_set(&pdev->DataSendReady, 0);
+      mb();
+      err = pdev->device_write(pdev);
+      if (err)
+      {
+	// problems with FIFO read (pcan_fifo_get()) => no data
+        atomic_set(&pdev->DataSendReady, 1);
+	wake_up_interruptible(&pdev->write_queue);
+      }
+    }
+  }
+
+  // stop netdev queue when PCAN FIFO is full
+  if (!pcan_fifo_not_full(&pdev->writeFifo)) {
+    stats->tx_fifo_errors++; // just for informational purposes ...
+    netif_stop_queue(dev);
+  }
 
   stats->tx_packets++;
   stats->tx_bytes += cf->can_dlc;
 
   dev->trans_start = jiffies;
 
+free_out:
   dev_kfree_skb(skb);
 
   return 0;
@@ -145,7 +180,7 @@ static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv)
 {
   struct net_device *ndev = dev->netdev;
-  struct net_device_stats *stats = ndev->get_stats(ndev);
+  struct net_device_stats *stats = pcan_netdev_get_stats(ndev);
   struct sk_buff *skb;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, ndev->name);
@@ -187,6 +222,15 @@ int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv
   return 0;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,28)
+static const struct net_device_ops pcan_netdev_ops = {
+	.ndo_open	= pcan_netdev_open,
+	.ndo_start_xmit	= pcan_netdev_tx,
+	.ndo_stop	= pcan_netdev_close,
+	.ndo_get_stats	= pcan_netdev_get_stats,
+};
+#endif
+
 //----------------------------------------------------------------------------
 // AF_CAN netdevice: initialize data structure
 //----------------------------------------------------------------------------
@@ -197,6 +241,8 @@ void pcan_netdev_init(struct net_device *dev)
   if (!dev)
     return;
 
+  /* should be superfluos as struct netdevice is zeroed at malloc time */
+#if 0
   dev->change_mtu           = NULL;
   dev->set_mac_address      = NULL;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
@@ -208,6 +254,7 @@ void pcan_netdev_init(struct net_device *dev)
 #else
   dev->header_ops           = NULL;
 #endif
+#endif
 
   dev->type             = ARPHRD_CAN;
   dev->hard_header_len  = 0;
@@ -217,15 +264,14 @@ void pcan_netdev_init(struct net_device *dev)
 
   dev->flags            = IFF_NOARP;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,28)
+  dev->netdev_ops       = &pcan_netdev_ops;
+#else
   dev->open             = pcan_netdev_open;
   dev->stop             = pcan_netdev_close;
   dev->hard_start_xmit  = pcan_netdev_tx;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
   dev->get_stats        = pcan_netdev_get_stats;
 #endif
-
-  dev->tx_timeout       = pcan_netdev_tx_timeout;
-  dev->watchdog_timeo   = TX_TIMEOUT;
 }
 
 //----------------------------------------------------------------------------

@@ -39,8 +39,6 @@
 
 //****************************************************************************
 // DEFINES
-#define SPIN_LOCK_IRQSAVE()
-#define SPIN_UNLOCK_IRQRESTORE()
 #define PARPORT_REGISTER_DEVICE()
 #define PARPORT_UNREGISTER_DEVICE()
 #define FREE_IRQ()

@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2008  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -32,8 +32,8 @@
 //****************************************************************************
 //
 // all parts to handle the interface specific parts of pcan-pci
-// 
-// $Id: pcan_pci.c 533 2008-02-04 21:31:54Z khitschler $
+//
+// $Id: pcan_pci.c 606 2010-02-10 19:47:16Z ohartkopp $
 //
 //****************************************************************************
 
@@ -71,7 +71,7 @@
 
 //****************************************************************************
 // GLOBALS
-#ifdef UDEV_SUPPORT 
+#ifdef UDEV_SUPPORT
 static struct pci_device_id pcan_pci_tbl[] =
 {
   {PCAN_PCI_VENDOR_ID, PCAN_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
@@ -141,7 +141,7 @@ void pcan_pci_enable_interrupt(struct pcandev *dev)
     case 1: PitaICRHigh |= 0x0001; break; // bit 16 (-16 = 0)
     case 2: PitaICRHigh |= 0x0040; break; // bit 22 (-16 = 6)
     case 3: PitaICRHigh |= 0x0080; break; // bit 23 (-16 = 7)
-  } 
+  }
   writew(PitaICRHigh, dev->port.pci.pvVirtConfigPort + PITA_ICR + 2);
 
   dev->wInitStep++;
@@ -180,11 +180,11 @@ static int pcan_pci_cleanup(struct pcandev *dev)
     case 6: pcan_pci_free_irq(dev);
     case 5: _pci_devices--;
     case 4: iounmap(dev->port.pci.pvVirtPort);
-    case 3: 
+    case 3:
            release_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE);
     case 2: if (dev->port.pci.nChannel == 0)
               iounmap(dev->port.pci.pvVirtConfigPort);
-    case 1: 
+    case 1:
             if (dev->port.pci.nChannel == 0)
               release_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE);
     case 0: pcan_delete_filter_chain(dev->filter);
@@ -220,7 +220,7 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
   init_waitqueue_head(&dev->read_queue);
   init_waitqueue_head(&dev->write_queue);
 
-  // set this before any instructions, fill struct pcandev, part 1 
+  // set this before any instructions, fill struct pcandev, part 1
   dev->wInitStep   = 0;
   dev->readreg     = pcan_pci_readreg;
   dev->writereg    = pcan_pci_writereg;
@@ -251,7 +251,7 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
 
     dev->wInitStep = 1;
 
-    dev->port.pci.pvVirtConfigPort = ioremap(dwConfigPort, PCI_CONFIG_PORT_SIZE); 
+    dev->port.pci.pvVirtConfigPort = ioremap(dwConfigPort, PCI_CONFIG_PORT_SIZE);
     if (dev->port.pci.pvVirtConfigPort == NULL)
       return -ENODEV;
 
@@ -284,7 +284,7 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
   dev->wInitStep = 4;
 
   _pci_devices++;
-  dev->wInitStep = 5; 
+  dev->wInitStep = 5;
 
   printk(KERN_INFO "%s: pci device minor %d found\n", DEVICE_NAME, dev->nMinor);
 
@@ -300,7 +300,7 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
 
   DPRINTK(KERN_DEBUG "%s: create_one_pci_device(nChannel=%d)\n", DEVICE_NAME, nChannel);
 
-  // make the first device on board 
+  // make the first device on board
   if ((local_dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_KERNEL)) == NULL)
   {
     result = -ENOMEM;
@@ -313,10 +313,6 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
   local_dev->device_write      = sja1000_write;
   local_dev->device_release    = sja1000_release;
   local_dev->port.pci.nChannel = nChannel;
-
-  #ifdef NETDEV_SUPPORT
-  local_dev->netdevice_write  = sja1000_write_frame;
-  #endif
 
   local_dev->props.ucExternalClock = 1;
 
@@ -408,7 +404,7 @@ int pcan_search_and_create_pci_devices(void)
         if (wSubSysID >= 10) // add a 3rd channel per card
           if ((result = create_one_pci_device(pciDev, 2, master_dev, &dev))) goto fail;
         if (wSubSysID >= 12) // add the 4th channel per card
-          result = create_one_pci_device(pciDev, 3, master_dev, &dev); 
+          result = create_one_pci_device(pciDev, 3, master_dev, &dev);
 
         fail:
         #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)

@@ -24,7 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Arno (a.vdlaan@hccnet.nl)
 //                John Privitera (JohnPrivitera@dciautomation.com)
@@ -34,7 +34,7 @@
 //
 // pcan_fops.c - all file operation functions, exports only struct fops
 //
-// $Id: pcan_fops.c 518 2007-08-08 07:40:31Z edouard $
+// $Id: pcan_fops.c 603 2010-02-08 16:46:32Z ohartkopp $
 //
 //****************************************************************************
 
@@ -44,7 +44,9 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
 #include <linux/config.h>
 #else
+#ifndef AUTOCONF_INCLUDED
 #include <linux/autoconf.h>
+#endif
 #endif
 #include <linux/module.h>
 
@@ -269,7 +271,7 @@ void pcan_release_path(PCAN_RELEASE_PATH_ARGS)
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS 
+// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS
 TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev)
 {
   TPEXTENDEDSTATUS local;
@@ -279,12 +281,12 @@ TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev)
   local.nPendingReads = dev->readFifo.nStored;
 
   // get infos for friends of polling operation
-  if (!pcan_fifo_empty(&dev->readFifo))
+  if (pcan_fifo_empty(&dev->readFifo))
     local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
   local.nPendingWrites = (dev->writeFifo.nStored + ((atomic_read(&dev->DataSendReady)) ? 0 : 1));
 
-  if (!pcan_fifo_near_full(&dev->writeFifo))
+  if (!pcan_fifo_not_full(&dev->writeFifo))
     local.wErrorFlag |= CAN_ERR_QXMTFULL;
 
   local.nLastError = dev->nLastError;
@@ -301,10 +303,10 @@ TPSTATUS pcan_ioctl_status_common(struct pcandev *dev)
   local.wErrorFlag = dev->wCANStatus;
 
   // get infos for friends of polling operation
-  if (!pcan_fifo_empty(&dev->readFifo))
+  if (pcan_fifo_empty(&dev->readFifo))
     local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
-  if (!pcan_fifo_near_full(&dev->writeFifo))
+  if (!pcan_fifo_not_full(&dev->writeFifo))
     local.wErrorFlag |= CAN_ERR_QXMTFULL;
 
   local.nLastError = dev->nLastError;
@@ -313,7 +315,7 @@ TPSTATUS pcan_ioctl_status_common(struct pcandev *dev)
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_DIAG 
+// is called at user ioctl() with cmd = PCAN_DIAG
 TPDIAG pcan_ioctl_diag_common(struct pcandev *dev)
 {
   TPDIAG local;
@@ -354,10 +356,10 @@ TPDIAG pcan_ioctl_diag_common(struct pcandev *dev)
   local.wErrorFlag      = dev->wCANStatus;
 
   // get infos for friends of polling operation
-  if (!pcan_fifo_empty(&dev->readFifo))
+  if (pcan_fifo_empty(&dev->readFifo))
     local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
-  if (!pcan_fifo_near_full(&dev->writeFifo))
+  if (!pcan_fifo_not_full(&dev->writeFifo))
     local.wErrorFlag |= CAN_ERR_QXMTFULL;
 
   local.nLastError      = dev->nLastError;

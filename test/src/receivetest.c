@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2006  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com 
 // www.peak-system.com
@@ -22,16 +22,17 @@
 //****************************************************************************
 
 //****************************************************************************
-// common part between no-realtime and realtime
-// receivetest_common.c - a small program to test the receive features of pcan driver 
+// receivetest.c - a small program to test the receive features of pcan driver 
 //                 and the supporting shared library
 //
-// $Id: receivetest.c 539 2008-02-15 18:16:12Z edouard $
+// for example of realtime variant look at "receivetest_rt.c"
+//
+// $Id: receivetest.c 592 2009-06-07 21:04:25Z khitschler $
 //
 //****************************************************************************
 
 // set here current release for this program
-#define CURRENT_RELEASE "Release_20060501_a"
+#define CURRENT_RELEASE "Release_20090203_n"
 
 //****************************************************************************
 // INCLUDE
@@ -67,11 +68,89 @@ const char *current_release;
 //****************************************************************************
 // CODE
 
-#ifdef NO_RT
-  #include "receivetest_linux.c"
-#else
-  #include "receivetest_rt.c"
-#endif
+// what has to be done at program exit
+void do_exit(int error)
+{
+  if (h) 
+  {
+    print_diag("receivetest");
+    CAN_Close(h);
+  }
+  printf("receivetest: finished (%d).\n\n", error);
+  exit(error);
+}
+
+// the signal handler for manual break Ctrl-C
+void signal_handler(int signal)
+{
+  do_exit(0);
+}
+
+// what has to be done at program start
+void init()
+{
+  /* install signal handlers */
+  signal(SIGTERM, signal_handler);
+  signal(SIGINT, signal_handler);
+}
+
+// open the CAN port
+int open_can(bool bDevNodeGiven,bool bTypeGiven,const char *szDevNode,int nType,__u32 dwPort,__u16 wIrq)
+{
+  int err = 0;
+  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) 
+    h = LINUX_CAN_Open(szDevNode, O_RDWR);
+  else 
+  {
+		// please use what is appropriate
+		// HW_DONGLE_SJA
+		// HW_DONGLE_SJA_EPP
+		// HW_ISA_SJA
+		// HW_PCI
+		// HW_USB
+    h = CAN_Open(nType, dwPort, wIrq);
+  }
+  if (!h) 
+    return 1;
+  
+  return err;
+}
+
+// read from CAN forever - until manual break
+int read_loop()
+{
+  // read in endless loop until Ctrl-C
+  while (1) 
+  {
+    TPCANMsg m;
+    __u32 status;
+    
+    if ((errno = CAN_Read(h, &m))) 
+    {
+      perror("receivetest: CAN_Read()");
+      return errno;
+    }
+    else 
+    {
+      print_message(&m);
+      // check if a CAN status is pending
+      if (m.MSGTYPE & MSGTYPE_STATUS) 
+      {
+        status = CAN_Status(h);
+        if ((int)status < 0) 
+        {
+          errno = nGetLastError();
+          perror("receivetest: CAN_Status()");
+          return errno;
+        }
+        else
+          printf("receivetest: pending CAN status 0x%04x read.\n", (__u16)status);
+      }
+    }
+  }
+
+  return 0;
+}
 
 static void hlpMsg(void)
 {
@@ -133,7 +212,8 @@ int main(int argc, char *argv[])
         break;
       case 't':
         nType = getTypeOfInterface(ptr);
-        if (!nType){
+        if (!nType)
+        {
           errno = EINVAL;
           printf("receivetest: unknown type of interface!\n");
           goto error;
@@ -164,27 +244,33 @@ int main(int argc, char *argv[])
         break;
     }
   }
+  
   // simple command input check
-  if (bDevNodeGiven && bTypeGiven){
+  if (bDevNodeGiven && bTypeGiven)
+  {
     errno = EINVAL;
     perror("receivetest: device node and type together is useless");
     goto error;
   }
 
   // give some information back
-  if (!bTypeGiven){
+  if (!bTypeGiven)
+  {
     printf("receivetest: device node=\"%s\"\n", szDevNode);
   }
-  else{
+  else
+  {
     printf("receivetest: type=%s", getNameOfInterface(nType));
-    if (nType == HW_USB){
+    if (nType == HW_USB)
+    {
       if (dwPort)
         printf(", %d. device\n", dwPort);
       else
         printf(", standard device\n");
     }
     else{
-      if (dwPort){
+      if (dwPort)
+      {
         if (nType == HW_PCI)
           printf(", %d. PCI device", dwPort);
         else
@@ -208,31 +294,27 @@ int main(int argc, char *argv[])
   else
     printf(", init with 500 kbit/sec.\n");
 
-  /* install signal handlers */
-  signal(SIGTERM, signal_handler);
-  signal(SIGINT, signal_handler);
-
   /* open CAN port */
-  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) {
+  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) 
+  {
     h = LINUX_CAN_Open(szDevNode, O_RDWR);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
-      printf("transmitest: can't open %s\n", szDevNode);
+    if (!h)
+    {
+      printf("receivetest: can't open %s\n", szDevNode);
       goto error;
     }
   }
-  else {
+  else 
+  {
     // please use what is appropriate  
     // HW_DONGLE_SJA 
     // HW_DONGLE_SJA_EPP 
     // HW_ISA_SJA 
     // HW_PCI 
     h = CAN_Open(nType, dwPort, wIrq);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
-      printf("transmitest: can't open %s device.\n", getNameOfInterface(nType));
+    if (!h)
+    {
+      printf("receivetest: can't open %s device.\n", getNameOfInterface(nType));
       goto error;
     }
   }
@@ -253,7 +335,8 @@ int main(int argc, char *argv[])
   if (wBTR0BTR1)
   {
     errno = CAN_Init(h, wBTR0BTR1, nExtended);
-    if (errno) {
+    if (errno) 
+    {
       perror("receivetest: CAN_Init()");
       goto error;
     }

@@ -2,7 +2,7 @@
 #define __PCAN_H__
 
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com 
 // www.peak-system.com
@@ -29,7 +29,7 @@
 // pcan.h
 // constants and definitions to access the drivers 
 //
-// $Id: pcan.h 453 2007-02-08 23:07:13Z khitschler $
+// $Id: pcan.h 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
@@ -170,6 +170,23 @@ typedef struct
 } TPMSGFILTER;
 
 //****************************************************************************
+// currently available sub-functions
+#define SF_GET_SERIALNUMBER 1 // to get the serial number (currently only pcan-usb)
+#define SF_SET_SERIALNUMBER 2 // to set the serial number (currently only pcan-usb)
+#define SF_GET_HCDEVICENO   3 // request hardcoded device number (currently only pcan-usb)
+#define SF_SET_HCDEVICENO   4 // to set hardcoded device number (currently only pcan-usb)
+
+typedef struct
+{
+  int   nSubFunction;    // a sub-function number SF_... to determine the union element used
+  union
+  {
+    DWORD dwSerialNumber; // to get and set the pcan-usb serial number
+    BYTE  ucHCDeviceNo;   // only for USB-devices to get or set a hard assigned number
+  } func;
+} TPEXTRAPARAMS;
+
+//****************************************************************************
 // some predefines for ioctls
 #define PCAN_MAGIC_NUMBER  'z'
 #define MYSEQ_START        0x80
@@ -184,5 +201,6 @@ typedef struct
 #define PCAN_BTR0BTR1       _IOWR(PCAN_MAGIC_NUMBER, MYSEQ_START + 5, TPBTR0BTR1)
 #define PCAN_GET_EXT_STATUS _IOR (PCAN_MAGIC_NUMBER, MYSEQ_START + 6, TPEXTENDEDSTATUS)
 #define PCAN_MSG_FILTER     _IOW (PCAN_MAGIC_NUMBER, MYSEQ_START + 7, TPMSGFILTER)
+#define PCAN_EXTRA_PARAMS   _IOWR(PCAN_MAGIC_NUMBER, MYSEQ_START + 8, TPEXTRAPARAMS)
 
 #endif // __PCAN_H__

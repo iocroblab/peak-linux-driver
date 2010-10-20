@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2001-2007  PEAK System-Technik GmbH
+# Copyright (C) 2001-2009  PEAK System-Technik GmbH
 #
 # linux@peak-system.com
 # www.peak-system.com
@@ -11,10 +11,28 @@
 #
 # Maintainer: Klaus Hitschler (klaus.hitschler@gmx.de)
 #
-# $Id: pcan_make_devices 490 2007-03-20 21:17:46Z khitschler $
+# $Id: pcan_make_devices 573 2009-02-15 14:05:40Z khitschler $
 #
 group="root"
 mode="666"
+usage="Usage: pcan_make_devices count-of-device-node-for-each-type [--help | -h]"
+
+if test $# -gt 0; then
+  case $1 in
+  [1-8])  ;;
+  "--help" | "-h" | "-?" | "/?")
+          echo ""
+          echo $usage
+          echo ""
+          echo "Info: Create \"count-of-device-node-for-each-type\" device nodes for each PCAN-type."
+          echo ""
+          echo "(c) Klaus Hitschler and PEAK System 2009"
+          echo "www.peak-system.com"
+          echo ""
+          exit 1 ;;
+  "--debug" | "-d") DEBUG=1 ;;
+  esac
+fi
 
 if test $UID -ne 0; then
   echo "ERROR: you must be root to use pcan_make_devices!"
@@ -25,7 +43,7 @@ fi
 # check command line arguments
 if test $# -le 0; then
   echo "ERROR: please provide the number of devices per interface type!"
-  echo "usage: pcan_make_devices n"
+  echo $usage
   echo ""
   exit 1
 fi
@@ -49,7 +67,7 @@ if test "$major"; then
   j=$[$j + 8];
   done;
 else
-  echo "Please do first a \"insmod pcan.o or insmod pcan.ko ... (depends on kernel version)\"";
+  echo "Info: Please do first a \"modprobe pcan.o or modprobe pcan.ko .. (depends on kernel version)\"";
 fi
 
 # end of script

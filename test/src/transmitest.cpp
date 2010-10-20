@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2006  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com 
 // www.peak-system.com
@@ -22,16 +22,17 @@
 //****************************************************************************
 
 //****************************************************************************
-// common part between no-realtime and realtime
 // transmitest_common.cpp - a simple program to test CAN transmits
 //
-// $Id: transmitest.cpp 539 2008-02-15 18:16:12Z edouard $
+// for the realtime-variant look at transmitest_rt.cpp
+//
+// $Id: transmitest.cpp 599 2009-11-08 21:04:50Z khitschler $
 //
 //****************************************************************************
 
 //----------------------------------------------------------------------------
 // set here current release for this program
-#define CURRENT_RELEASE "Release_20060501_a"
+#define CURRENT_RELEASE "Release_20091108_n"
 
 //****************************************************************************
 // INCLUDES
@@ -44,6 +45,7 @@
 #include <string.h>
 #include <stdlib.h>   // strtoul
 #include <fcntl.h>    // O_RDWR
+#include <unistd.h>
 
 #include <libpcan.h>
 #include <src/common.h>
@@ -57,24 +59,77 @@
 
 //****************************************************************************
 // GLOBALS
-
 HANDLE h;
 const char *current_release;
 std::list<TPCANMsg> *List;
 int nExtended = CAN_INIT_TYPE_ST;
+
 //****************************************************************************
 // CODE
 
-#ifdef NO_RT
-  #include "transmitest_linux.cpp"
-#else
-  #include "transmitest_rt.cpp"
-#endif
+// do, what has to be done at programm exit
+void do_exit(int error)
+{
+  if (h)
+  {
+    print_diag("transmitest");
+    CAN_Close(h);
+  }
+  printf("transmitest: finished (%d).\n\n", error);
+  exit(error);
+}
+
+// handle manual break signals
+void signal_handler(int signal)
+{
+  do_exit(0);
+}
+
+// do, what has to be done at program init
+void init()
+{
+  // install signal handlers
+  signal(SIGTERM, signal_handler);
+  signal(SIGINT, signal_handler);
+}
+
+// loop writing to CAN-Bus
+int write_loop(__u32 dwMaxTimeInterval)
+{
+  // write out endless loop until Ctrl-C
+  double scale = (dwMaxTimeInterval * 1000.0) / (RAND_MAX + 1.0);
+
+  while (1)
+  {
+    std::list<TPCANMsg>::iterator iter;
+    int i;
+
+    for (iter = List->begin(); iter != List->end(); iter++)
+    {
+      // test for standard frames only
+      if ((nExtended == CAN_INIT_TYPE_EX) || !(iter->MSGTYPE & MSGTYPE_EXTENDED))
+      {
+        // send the message
+        if ((errno = CAN_Write(h, &(*iter))))
+        {
+          perror("transmitest: CAN_Write()");
+          return errno;
+        }
+
+        // wait some time before the invocation
+        if (dwMaxTimeInterval)
+          usleep((__useconds_t)(scale * rand()));
+      }
+    }
+  }
+
+  return 0;
+}
 
 static void hlpMsg(void)
 {
   printf("transmitest - a small test program which sends CAN messages.\n");
-  printf("usage:   transmitest filename {[-f=devicenode] | {[-t=type] [-p=port [-i=irq]]}} [-b=BTR0BTR1] [-e] [-?]\n");
+  printf("usage:   transmitest filename {[-f=devicenode] | {[-t=type] [-p=port [-i=irq]]}} [-b=BTR0BTR1] [-e] [-r=msec] [-?]\n");
   printf("options: filename - mandatory name of message description file.\n");
   printf("         -f - devicenode - path to devicefile, default=%s\n", DEFAULT_NODE);
   printf("         -t - type of interface, e.g. 'pci', 'sp', 'epp' ,'isa', 'pccard' or 'usb' (default: pci).\n");
@@ -82,6 +137,7 @@ static void hlpMsg(void)
   printf("         -i - irq in dec notation if applicable, e.g. 7 (default: irq of 1st port).\n");
   printf("         -b - BTR0BTR1 code in hex, e.g. 0x001C (default: 500 kbit).\n");
   printf("         -e - accept extended frames. (default: standard frames)\n");
+  printf("         -r - messages are send at random times with maximum time in milliseconds (msec)\n");
   printf("         -? or --help - this help\n");
   printf("\n");
 }
@@ -94,6 +150,7 @@ int main(int argc, char *argv[])
   __u32 dwPort = 0;
   __u16 wIrq = 0;
   __u16 wBTR0BTR1 = 0;
+  __u32 dwMaxTimeInterval = 0;
   char *filename = NULL;
   const char *szDevNode = DEFAULT_NODE;
   bool bDevNodeGiven = false;
@@ -109,12 +166,14 @@ int main(int argc, char *argv[])
   init();
 
   // decode command line arguments
-  for (i = 1; i < argc; i++) {
+  for (i = 1; i < argc; i++) 
+  {
     char c;
 
     ptr = argv[i];
 
-    if (*ptr == '-') {
+    if (*ptr == '-') 
+    {
       while (*ptr == '-')
         ptr++;
 
@@ -124,14 +183,16 @@ int main(int argc, char *argv[])
       if (*ptr == '=')
       ptr++;
 
-      switch(tolower(c)) {
+      switch(tolower(c)) 
+      {
         case 'f':
           szDevNode = ptr;
           bDevNodeGiven = true;
           break;
         case 't':
           nType = getTypeOfInterface(ptr);
-          if (!nType) {
+          if (!nType) 
+          {
             errno = EINVAL;
             printf("transmitest: unknown type of interface\n");
             goto error;
@@ -155,6 +216,9 @@ int main(int argc, char *argv[])
         case 'b':
           wBTR0BTR1 = (__u16)strtoul(ptr, NULL, 16);
           break;
+        case 'r':
+          dwMaxTimeInterval = strtoul(ptr, NULL, 10);
+          break;
         default:
           errno = EINVAL;
           printf("transmitest: unknown command line argument\n");
@@ -167,14 +231,16 @@ int main(int argc, char *argv[])
   }
 
   // test for filename
-  if (filename == NULL) {
+  if (filename == NULL) 
+  {
     errno = EINVAL;
     perror("transmitest: no filename given");
     goto error;
   }
 
   // test device node and type
-  if (bDevNodeGiven && bTypeGiven) {
+  if (bDevNodeGiven && bTypeGiven) 
+  {
     errno = EINVAL;
     perror("transmitest: device node and type together is useless");
     goto error;
@@ -183,17 +249,18 @@ int main(int argc, char *argv[])
   // give the filename to my parser
   MyParser.setFileName(filename);
 
-  // tell some information to user
-  if (!bTypeGiven) {
+  // tell some information to the user
+  if (!bTypeGiven) 
+  {
     printf("transmitest: device node=\"%s\"\n", szDevNode);
   }
   else {
     printf("transmitest: type=%s", getNameOfInterface(nType));
-    if (nType == HW_USB) {
+    if (nType == HW_USB) 
       printf(", Serial Number=default, Device Number=%d\n", dwPort); 
-    }
     else {
-      if (dwPort) {
+      if (dwPort) 
+      {
         if (nType == HW_PCI)
           printf(", %d. PCI device", dwPort);
         else
@@ -220,9 +287,8 @@ int main(int argc, char *argv[])
     printf(", init with 500 kbit/sec.\n");
     printf("             Data will be read from \"%s\".\n", filename);
 
-  /* install signal handlers */
-  signal(SIGTERM, signal_handler);
-  signal(SIGINT, signal_handler);
+  if (dwMaxTimeInterval)
+    printf("             Messages are send in random time intervalls with a max. gap time of %d msec.\n", dwMaxTimeInterval);
   
   /* get the list of data from parser */
   List = MyParser.Messages();
@@ -234,11 +300,11 @@ int main(int argc, char *argv[])
   }
   
   /* open CAN port */
-  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) {
+  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) 
+  {
     h = LINUX_CAN_Open(szDevNode, O_RDWR);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
+    if (!h)
+    {
       printf("transmitest: can't open %s\n", szDevNode);
       goto error;
     }
@@ -250,9 +316,8 @@ int main(int argc, char *argv[])
     // HW_ISA_SJA 
     // HW_PCI 
     h = CAN_Open(nType, dwPort, wIrq);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
+    if (!h)
+    {
       printf("transmitest: can't open %s device.\n", getNameOfInterface(nType));
       goto error;
     }
@@ -271,15 +336,17 @@ int main(int argc, char *argv[])
   }
   
   // init to a user defined bit rate
-  if (wBTR0BTR1) {
+  if (wBTR0BTR1) 
+  {
     errno = CAN_Init(h, wBTR0BTR1, nExtended);
-    if (errno) {
+    if (errno) 
+    {
       perror("transmitest: CAN_Init()");
       goto error;
     }
   }
   // enter in the write loop
-  errno = write_loop();
+  errno = write_loop(dwMaxTimeInterval);
   if (!errno)
     return 0;
 

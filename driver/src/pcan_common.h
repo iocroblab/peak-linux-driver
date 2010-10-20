@@ -2,7 +2,7 @@
 #define __PCAN_COMMON_H__
 
 //****************************************************************************
-// Copyright (C) 2001-2008  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -27,7 +27,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //****************************************************************************
@@ -35,7 +35,7 @@
 // global defines to include in all files this module is made of
 // ! this must always the 1st include in all files !
 //
-// $Id: pcan_common.h 543 2008-02-20 11:54:03Z khitschler $
+// $Id: pcan_common.h 626 2010-06-16 21:37:49Z khitschler $
 //
 //****************************************************************************
 
@@ -51,7 +51,10 @@
 #include <linux/version.h>  // if this file is not found: please look @ /boot/vmlinuz.version.h and make a symlink
 
 // support for MODVERSIONS
+#ifndef AUTOCONF_INCLUDED
 #include <linux/autoconf.h>
+#endif
+
 #if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
   #define MODVERSIONS
 #endif
@@ -69,12 +72,16 @@
 #ifndef NO_RT
   #include <rtdm/rtdm_driver.h>
   #include <asm/div64.h>
-  static inline void rt_gettimeofday(struct timeval *tv) 
+  #if RTDM_API_VER < 5
+    typedef nanosecs_abs_t uint64_t;
+  #endif
+
+  static inline void rt_gettimeofday(struct timeval *tv)
   {
-      nanosecs_abs_t current_time = rtdm_clock_read(); 
+      nanosecs_abs_t current_time = rtdm_clock_read();
       tv->tv_usec = (do_div(current_time, 1000000000) / 1000);
       tv->tv_sec = current_time;
-  	  
+
   }
   #define DO_GETTIMEOFDAY(tv) rt_gettimeofday(&tv)
 #else
@@ -107,7 +114,7 @@
   #endif
 #endif
 
-// some preparative defintions for kernel 2.6.x 
+// some preparative definitions for kernel 2.6.x
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,23)
   typedef void irqreturn_t;
   #define IRQ_NONE
@@ -115,11 +122,21 @@
   #define IRQ_RETVAL(x)
 #endif
 
-// IRQ's return val for Linux and RealTime 
+// IRQ's return val for Linux and RealTime
 #ifndef NO_RT
   #define PCAN_IRQ_RETVAL(x) x
+
+  #define INIT_LOCK(lock)
+  #define DECLARE_SPIN_LOCK_IRQSAVE_FLAGS
+  #define SPIN_LOCK_IRQSAVE(lock)
+  #define SPIN_UNLOCK_IRQRESTORE(lock)
 #else
   #define PCAN_IRQ_RETVAL(x) IRQ_RETVAL(x)
+
+  #define INIT_LOCK(lock) spin_lock_init(lock)
+  #define DECLARE_SPIN_LOCK_IRQSAVE_FLAGS unsigned long flags
+  #define SPIN_LOCK_IRQSAVE(lock) spin_lock_irqsave(lock, flags)
+  #define SPIN_UNLOCK_IRQRESTORE(lock) spin_unlock_irqrestore(lock, flags)
 #endif
 
 // count of function variables changed from 2.6.19
@@ -152,17 +169,17 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 
 // different data sink alternatives
 #ifdef NETDEV_SUPPORT
-#define pcan_xxxdev_rx(dev, frame, time) pcan_netdev_rx(dev, frame, time) 
+#define pcan_xxxdev_rx(dev, frame, time) pcan_netdev_rx(dev, frame, time)
 #else
 #define pcan_xxxdev_rx(dev, frame, time) pcan_chardev_rx(dev, frame, time)
 #endif
 
-// moved from pcan_main.h 
+// moved from pcan_main.h
 #define DEVICE_NAME      "pcan"                            // the name of the module and the proc entry
 
 //----------------------------------------------------------------------------
-// set here the current release of the driver 'Release_date_nr' synchronous 
-// with SVN 
-#define CURRENT_RELEASE "Release_20080220_n"  // $name$
+// set here the current release of the driver 'Release_date_nr' synchronous
+// with SVN
+#define CURRENT_RELEASE "Release_20100616_n"  // $name$
 
 #endif // __PCAN_COMMON_H__

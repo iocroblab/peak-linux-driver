@@ -24,7 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Arno (a.vdlaan@hccnet.nl)
 //                John Privitera (JohnPrivitera@dciautomation.com)
@@ -136,11 +136,11 @@ static int pcan_ioctl_read(struct file *filep, struct pcandev *dev, TPCANRdMsg *
   // DPRINTK(KERN_DEBUG "%s: pcan_ioctl(PCAN_READ_MSG)\n", DEVICE_NAME);
 
   // support nonblocking read if requested
-  if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_empty(&dev->readFifo)))
+  if ((filep->f_flags & O_NONBLOCK) && (pcan_fifo_empty(&dev->readFifo)))
     return -EAGAIN;
 
   // sleep until data are available
-  err = wait_event_interruptible(dev->read_queue, (pcan_fifo_empty(&dev->readFifo)));
+  err = wait_event_interruptible(dev->read_queue, (!pcan_fifo_empty(&dev->readFifo)));
 
   if (err)
     goto fail;
@@ -172,12 +172,12 @@ static int pcan_ioctl_write(struct file *filep, struct pcandev *dev, TPCANMsg *u
   // DPRINTK(KERN_DEBUG "%s: pcan_ioctl(PCAN_WRITE_MSG)\n", DEVICE_NAME);
 
   // support nonblocking write if requested
-  if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_near_full(&dev->writeFifo)) && (!atomic_read(&dev->DataSendReady)))
+  if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_not_full(&dev->writeFifo)) && (!atomic_read(&dev->DataSendReady)))
     return -EAGAIN;
 
   // sleep until space is available
   err = wait_event_interruptible(dev->write_queue,
-             (pcan_fifo_near_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady)));
+             (pcan_fifo_not_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady)));
   if (err)
     goto fail;
 
@@ -211,7 +211,13 @@ static int pcan_ioctl_write(struct file *filep, struct pcandev *dev, TPCANMsg *u
       mb();
       err = dev->device_write(dev);
       if (err)
+      {
         atomic_set(&dev->DataSendReady, 1);
+
+        // ignore only if the fifo is already empty
+        if (err == -ENODATA)
+          err = 0;
+      }
     }
     else
     {
@@ -224,7 +230,7 @@ static int pcan_ioctl_write(struct file *filep, struct pcandev *dev, TPCANMsg *u
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS 
+// is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS
 int pcan_ioctl_extended_status(struct pcandev *dev, TPEXTENDEDSTATUS *status)
 {
   int err = 0;
@@ -289,7 +295,7 @@ static int pcan_ioctl_diag(struct pcandev *dev, TPDIAG *diag)
 }
 
 //----------------------------------------------------------------------------
-// is called at user ioctl() with cmd = PCAN_INIT 
+// is called at user ioctl() with cmd = PCAN_INIT
 static int pcan_ioctl_init(struct pcandev *dev, TPCANInit *Init)
 {
   int err = 0;
@@ -363,7 +369,7 @@ static int pcan_ioctl_BTR0BTR1(struct pcandev *dev, TPBTR0BTR1 *BTR0BTR1)
 
 //----------------------------------------------------------------------------
 // add a message filter_element into the filter chain or delete all filter_elements
-int pcan_ioctl_msg_filter(struct pcandev *dev, TPMSGFILTER *filter)
+static int pcan_ioctl_msg_filter(struct pcandev *dev, TPMSGFILTER *filter)
 {
   TPMSGFILTER local_filter;
 
@@ -380,6 +386,38 @@ int pcan_ioctl_msg_filter(struct pcandev *dev, TPMSGFILTER *filter)
     return -EFAULT;
 
   return pcan_add_filter(dev->filter, local_filter.FromID, local_filter.ToID, local_filter.MSGTYPE);
+}
+
+//----------------------------------------------------------------------------
+// set or get extra parameters from the devices
+static int pcan_ioctl_extra_parameters(struct pcandev *dev, TPEXTRAPARAMS *params)
+{
+  int err = 0;
+  TPEXTRAPARAMS local;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_ioctl_extra_parameters()\n", DEVICE_NAME);
+
+  if (copy_from_user(&local, params, sizeof(local)))
+  {
+    err = -EFAULT;
+    goto fail;
+  }
+
+  if (dev->device_params == NULL)
+  {
+    err = -EINVAL;
+    goto fail;
+  }
+
+  err = dev->device_params(dev, &local);
+  if (err)
+    goto fail;
+
+  if (copy_to_user(params, &local, sizeof(*params)))
+    err = -EFAULT;
+
+  fail:
+  return err;
 }
 
 //----------------------------------------------------------------------------
@@ -411,7 +449,7 @@ int pcan_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsign
     case PCAN_DIAG:
       err = pcan_ioctl_diag(dev, (TPDIAG *)arg);
       break;
-    case PCAN_INIT: 
+    case PCAN_INIT:
       err = pcan_ioctl_init(dev, (TPCANInit *)arg);
       break;
     case PCAN_BTR0BTR1:
@@ -420,9 +458,12 @@ int pcan_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsign
     case PCAN_MSG_FILTER:
       err = pcan_ioctl_msg_filter(dev, (TPMSGFILTER *)arg);
       break;
+    case PCAN_EXTRA_PARAMS:
+      err = pcan_ioctl_extra_parameters(dev, (TPEXTRAPARAMS *)arg);
+      break;
 
     default:
-      DPRINTK(KERN_DEBUG "%s: pcan_ioctl(%d)\n", DEVICE_NAME, cmd);  
+      DPRINTK(KERN_DEBUG "%s: pcan_ioctl(%d)\n", DEVICE_NAME, cmd);
       err = -ENOTTY;
       break;
   }
@@ -439,7 +480,7 @@ static ssize_t pcan_read(struct file *filep, char *buf, size_t count, loff_t *f_
   int    len = 0;
   TPCANRdMsg msg;
   struct fileobj *fobj = (struct fileobj *)filep->private_data;
-  struct pcandev *dev  = fobj->dev; 
+  struct pcandev *dev  = fobj->dev;
 
   // DPRINTK(KERN_DEBUG "%s: pcan_read().\n", DEVICE_NAME);
 
@@ -450,11 +491,11 @@ static ssize_t pcan_read(struct file *filep, char *buf, size_t count, loff_t *f_
   if (fobj->nReadRest <= 0)
   {
     // support nonblocking read if requested
-    if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_empty(&dev->readFifo)))
+    if ((filep->f_flags & O_NONBLOCK) && (pcan_fifo_empty(&dev->readFifo)))
       return -EAGAIN;
 
     // sleep until data are available
-    err = wait_event_interruptible(dev->read_queue, (pcan_fifo_empty(&dev->readFifo)));
+    err = wait_event_interruptible(dev->read_queue, (!pcan_fifo_empty(&dev->readFifo)));
     if (err)
       return err;
 
@@ -481,7 +522,7 @@ static ssize_t pcan_read(struct file *filep, char *buf, size_t count, loff_t *f_
     fobj->nReadRest = 0;
     if (copy_to_user(buf, fobj->pcReadPointer, len))
       return -EFAULT;
-    fobj->pcReadPointer = fobj->pcReadBuffer; 
+    fobj->pcReadPointer = fobj->pcReadBuffer;
   }
   else
   {
@@ -503,7 +544,7 @@ static ssize_t pcan_read(struct file *filep, char *buf, size_t count, loff_t *f_
 
 static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, loff_t *f_pos)
 {
-  int err = 0; 
+  int err = 0;
   u32 dwRest;
   u8 *ptr;
 
@@ -529,7 +570,7 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
   while (1)
   {
     // search first '\n' from begin of buffer
-    ptr = fobj->pcWriteBuffer; 
+    ptr = fobj->pcWriteBuffer;
     while ((*ptr != '\n') && (ptr < fobj->pcWritePointer))
       ptr++;
 
@@ -604,12 +645,12 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
           #endif // ------- print out message, end ------------
 
           // support nonblocking write if requested
-          if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_near_full(&dev->writeFifo)) && (!atomic_read(&dev->DataSendReady)))
+          if ((filep->f_flags & O_NONBLOCK) && (!pcan_fifo_not_full(&dev->writeFifo)) && (!atomic_read(&dev->DataSendReady)))
             return -EAGAIN;
 
           // sleep until space is available
           err = wait_event_interruptible(dev->write_queue,
-                     (pcan_fifo_near_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady)));
+                     (pcan_fifo_not_full(&dev->writeFifo) || atomic_read(&dev->DataSendReady)));
           if (err)
             return err;
 
@@ -634,7 +675,10 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
             if ((err = dev->device_write(dev)))
             {
               atomic_set(&dev->DataSendReady, 1);
-              return err;
+
+              // ignore only if the fifo is already empty
+              if (err != -ENODATA)
+                return err;
             }
           }
           else
@@ -675,8 +719,8 @@ static unsigned int pcan_poll(struct file *filep, poll_table *wait)
   poll_wait(filep, &dev->write_queue, wait);
 
   // return on ops that could be performed without blocking
-  if (pcan_fifo_empty(&dev->readFifo))      mask |= (POLLIN  | POLLRDNORM);
-  if (pcan_fifo_near_full(&dev->writeFifo)) mask |= (POLLOUT | POLLWRNORM);
+  if (!pcan_fifo_empty(&dev->readFifo))    mask |= (POLLIN  | POLLRDNORM);
+  if (pcan_fifo_not_full(&dev->writeFifo)) mask |= (POLLOUT | POLLWRNORM);
 
   return mask;
 }

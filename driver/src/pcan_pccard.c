@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2006-2007  PEAK System-Technik GmbH
+// Copyright (C) 2006-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -24,14 +24,14 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //***************************************************************************
 //
 // system dependend parts to handle pcan-pccard
 //
-// $Id: pcan_pccard.c 465 2007-02-23 21:41:18Z ohartkopp $
+// $Id: pcan_pccard.c 550 2009-01-18 22:16:52Z khitschler $
 //
 //****************************************************************************
 
@@ -54,7 +54,7 @@
 
 //****************************************************************************
 // DEFINES
-#define PCCARD_MANF_ID     0x0377           // manufacturer PEAK System GmbH         
+#define PCCARD_MANF_ID     0x0377           // manufacturer PEAK System GmbH
 #define PCCARD_CARD_ID     0x0001           // card id
 
 //****************************************************************************
@@ -63,8 +63,8 @@
 
 #define CS_PREPARE(tpl) { tuple.DesiredTuple = tpl;  tuple.TupleData = buf; tuple.TupleOffset = 0; \
                           tuple.TupleDataMax = CISTPL_END; tuple.Attributes   = 0; }
-  
-  
+
+
 //****************************************************************************
 // CODE
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
@@ -78,11 +78,11 @@ MODULE_DEVICE_TABLE(pcmcia, pccard_id_table);
 #endif
 
 //****************************************************************************
-// unfortunately to get readdable code all the code was put into 2 files 
+// unfortunately to get readdable code all the code was put into 2 files
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
-#include <src/pcan_pccard-2.6.17.c>
+#include "src/pcan_pccard-2.6.17.c"
 #else
-#include <src/pcan_pccard-2.6.16.c>
+#include "src/pcan_pccard-2.6.16.c"
 #endif
 
 //****************************************************************************
@@ -95,32 +95,32 @@ static int pccard_init(void)
   register_pccard_driver(&pccard_info, &pccard_attach, &pccard_detach);
   return 0;
   #else
-	
+
   memset (&pcan_drv.pccarddrv, 0, sizeof(pcan_drv.pccarddrv));
-  
+
   pcan_drv.pccarddrv.owner      = THIS_MODULE;
   pcan_drv.pccarddrv.drv.name   = DEVICE_NAME;
-  
+
   #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
   pcan_drv.pccarddrv.attach     = pccard_attach;
   pcan_drv.pccarddrv.detach     = pccard_detach;
   #endif
-  
+
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
   pcan_drv.pccarddrv.id_table   = pccard_id_table;
   pcan_drv.pccarddrv.event      = pccard_event;
   pcan_drv.pccarddrv.attach     = pccard_attach;
   pcan_drv.pccarddrv.detach     = pccard_detach;
   #endif
-  
+
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,16)
   pcan_drv.pccarddrv.id_table   = pccard_id_table;
   pcan_drv.pccarddrv.probe      = pccard_probe;
   pcan_drv.pccarddrv.remove     = pccard_detach;
   pcan_drv.pccarddrv.suspend    = pccard_suspend;
-  pcan_drv.pccarddrv.resume     = pccard_resume;  
+  pcan_drv.pccarddrv.resume     = pccard_resume;
   #endif
-  
+
   return pcmcia_register_driver(&pcan_drv.pccarddrv);
   #endif
 }
@@ -130,11 +130,11 @@ static int pccard_init(void)
 void pcan_pccard_deinit(void)
 {
   DPRINTK(KERN_DEBUG "%s: pcan_pccard_deinit()\n", DEVICE_NAME);
-  
+
   #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
   pcan_unlink_pccard();
   #endif
-  
+
 	#ifdef LINUX_24
   unregister_pccard_driver(&pccard_info);
 	#else
@@ -150,14 +150,14 @@ void pcan_pccard_deinit(void)
 int  pcan_pccard_register_devices(void)
 {
   int ret;
-  
+
   DPRINTK(KERN_DEBUG "%s: pcan_pccard_register_devices()\n", DEVICE_NAME);
 
   if (!(ret = pccard_init()))
   {
-    DPRINTK(KERN_DEBUG "%s: pcan_pccard_register_devices() is OK\n", DEVICE_NAME);  
+    DPRINTK(KERN_DEBUG "%s: pcan_pccard_register_devices() is OK\n", DEVICE_NAME);
   }
-  
-  return ret; 
+
+  return ret;
 }
 // finish
