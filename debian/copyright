@@ -1,37 +1,37 @@
-Format-Specification: http://wiki.debian.org/Proposals/CopyrightFormat
-Upstream-Maintainer: PEAK System-Technik GmbH <linux@peak-system.com>
-Packaged-By: Teemu Ikonen <tpikonen@gmail.com>
-Packaged-Date: 2007-06-05_18:01:41+02:00 
-Original-Source-Location: http://www.peak-system.com/linux/
+This work was packaged for Debian by:
+
+    Markus Becker <mab@comnets.uni-bremen.de> on Fri, 08 Oct 2010 09:17:33 +0200
+
+It was downloaded from:
+
+    <http://www.peak-system.com/fileadmin/media/linux/index.htm#download>
 
 Files: *
-Copyright: 2001-2007  PEAK System-Technik GmbH
-License: GPL-2+
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
- . 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- .
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software Foundation, 
- Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
- .
- On Debian GNU/Linux systems, the complete text of the GNU General Public
- License can be found in `/usr/share/common-licenses/GPL'. 
+Upstream Author(s):
+    Klaus Hitschler <klaus.hitschler@gmx.de>
+    Edouard Tisserant <edouard.tisserant@lolitech.fr>
+    Laurent Bessard <laurent.bessard@lolitech.fr>
+Copyright:
+    Copyright (C) 2001-2010 PEAK System-Technik GmbH
+License: GPL-2
+    See /usr/share/common-licenses/GPL-2
 
 Files: driver/src/can.h, driver/src/error.h 
-Copyright: 2002-2007 Volkswagen Group Electronic Research
+Upstream Author(s):
+    Oliver Hartkopp <oliver.hartkopp@volkswagen.de>
+    Urs Thuermann   <urs.thuermann@volkswagen.de>
+Copyright:
+    Copyright (C) 2002-2007 Volkswagen Group Electronic Research
 License: GPL-2
- (These files are part of the SocketCAN Linux kernel CAN-bus interface, which
-  has been merged into version 2.6.25 of Linux. The Licensing information
-  for these files was obtained from the SocketCAN subversion repository,
-  http://svn.berlios.de/viewcvs/socketcan/trunk/COPYING )
+    See /usr/share/common-licenses/GPL-2
+    (These files are part of the SocketCAN Linux kernel CAN-bus interface, which
+     has been merged into version 2.6.25 of Linux. The Licensing information
+     for these files was obtained from the SocketCAN subversion repository,
+     http://svn.berlios.de/viewcvs/socketcan/trunk/COPYING )
 
-Files: debian/*
-Copyright: 2007-2008 Teemu Ikonen <tpikonen@gmail.com>
-License: GPL-2+
+The Debian packaging is:
+
+    Copyright (C) 2010 Markus Becker <mab@comnets.uni-bremen.de>
+                  2007-2008 Teemu Ikonen <tpikonen@gmail.com>
+License: GPL-2
+    See /usr/share/common-licenses/GPL-2
