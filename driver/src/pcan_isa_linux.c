@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -152,7 +152,7 @@ static int pcan_isa_req_irq(struct pcandev *dev)
   {
     if (!dev->port.isa.my_anchor->same_irq_active) // the first device
     {
-      if ((err = request_irq(dev->port.isa.wIrq, pcan_isa_irqhandler, IRQF_DISABLED, "pcan", dev->port.isa.my_anchor)))
+      if ((err = request_irq(dev->port.isa.wIrq, pcan_isa_irqhandler, 0, "pcan", dev->port.isa.my_anchor)))
         return err;
     }
 

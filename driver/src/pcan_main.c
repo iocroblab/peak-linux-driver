@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -24,7 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Philipp Baer     (philipp.baer@informatik.uni-ulm.de)
 //                Garth Zeglin     (garthz@ri.cmu.edu)
@@ -36,7 +36,7 @@
 // pcan_main.c - the starting point of the driver,
 //               init and cleanup and proc interface
 //
-// $Id: pcan_main.c 526 2007-10-29 21:42:02Z khitschler $
+// $Id: pcan_main.c 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
@@ -46,7 +46,9 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
 #include <linux/config.h>
 #else
+#ifndef AUTOCONF_INCLUDED
 #include <linux/autoconf.h>
+#endif
 #endif
 
 // #define KBUILD_MODNAME pcan
@@ -113,9 +115,6 @@ struct driverobj pcan_drv = {};
 //----------------------------------------------------------------------------
 // some stuff to support SysFS coming with kernel 2.6
 #include <linux/device.h>
-
-// not yet implemented
-
 #endif
 
 // build current driver config string for output in kernel log and procfs
@@ -201,29 +200,29 @@ void frame2msg(struct can_frame *cf, TPCANMsg *msg)
     memset(msg, 0, sizeof(*msg));
     msg->MSGTYPE = MSGTYPE_STATUS;
     msg->LEN     = 4;
-    
+
     if (cf->can_id & CAN_ERR_CRTL)
     {
       // handle data overrun
       if (cf->data[1] & CAN_ERR_CRTL_RX_OVERFLOW)
         msg->DATA[3] |= CAN_ERR_OVERRUN;
-      
+
       // handle CAN_ERR_BUSHEAVY
       if (cf->data[1] & CAN_ERR_CRTL_RX_WARNING)
         msg->DATA[3] |= CAN_ERR_BUSHEAVY;
     }
-    
+
     if (cf->can_id & CAN_ERR_BUSOFF_NETDEV)
       msg->DATA[3] |= CAN_ERR_BUSOFF;
-      
+
     return;
   }
-  
+
   if (cf->can_id & CAN_RTR_FLAG)
     msg->MSGTYPE = MSGTYPE_RTR;
   else
     msg->MSGTYPE = MSGTYPE_STANDARD;
-      
+
   if (cf->can_id & CAN_EFF_FLAG)
     msg->MSGTYPE |= MSGTYPE_EXTENDED;
 
@@ -258,7 +257,7 @@ void msg2frame(struct can_frame *cf, TPCANMsg *msg)
 //----------------------------------------------------------------------------
 // request time in msec, fast
 u32 get_mtime(void)
-{    
+{
   return (jiffies / HZ) * 1000;
 }
 
@@ -277,17 +276,17 @@ static void subtract_timeval(struct timeval *x, struct timeval *y)
     else
       goto fail;
   }
-    
+
   if (x->tv_sec >= y->tv_sec)
   {
     x->tv_sec -= y->tv_sec;
     return;
   }
-    
+
   fail:
   x->tv_sec = x->tv_usec = 0;
 }
- 
+
 // get relative time to start of driver
 void get_relative_time(struct timeval *tv, struct timeval *tr)
 {
@@ -295,7 +294,7 @@ void get_relative_time(struct timeval *tv, struct timeval *tr)
     DO_GETTIMEOFDAY((*tr));
   else
     memcpy(tr, tv, sizeof(*tr));
-  
+
   subtract_timeval(tr, &pcan_drv.sInitTime);
 }
 
@@ -303,7 +302,7 @@ void get_relative_time(struct timeval *tv, struct timeval *tr)
 void timeval2pcan(struct timeval *tv, u32 *msecs, u16 *usecs)
 {
   *msecs = (u32)(tv->tv_sec * 1000 + tv->tv_usec / 1000);
-  *usecs = (u16)(tv->tv_usec % 1000);  
+  *usecs = (u16)(tv->tv_usec % 1000);
 }
 
 //----------------------------------------------------------------------------
@@ -313,17 +312,17 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
   struct pcandev *dev;
   struct list_head *ptr;
   int    len = 0;
-  
+
   DPRINTK(KERN_DEBUG "%s: pcan_read_procmem()\n", DEVICE_NAME);
 
   len += sprintf(page + len, "\n");
   len += sprintf(page + len, "*------------ PEAK-Systems CAN interfaces (www.peak-system.com) -------------\n");
   len += sprintf(page + len, "*--------------------------  %s  ----------------------------\n", pcan_drv.szVersionString);
   len += sprintf(page + len, "%s\n", config);
-  len += sprintf(page + len, "*--------------------- %d interfaces @ major %03d found -----------------------\n", 
+  len += sprintf(page + len, "*--------------------- %d interfaces @ major %03d found -----------------------\n",
                      pcan_drv.wDeviceCount, pcan_drv.nMajor);
   len += sprintf(page + len, "*n -type- ndev --base-- irq --btr- --read-- --write- --irqs-- -errors- status\n");
-  
+
   // loop trough my devices
   for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
   {
@@ -332,8 +331,8 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
     #ifdef NETDEV_SUPPORT
     struct net_device_stats *stats; /* rx/tx statistics can be found here */
     #endif
-    
-    dev = (struct pcandev *)ptr;  
+
+    dev = (struct pcandev *)ptr;
     switch (dev->wType)
     {
       case HW_ISA_SJA:
@@ -371,7 +370,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
     }
 
     #ifdef NETDEV_SUPPORT
-    stats = dev->netdev->get_stats(dev->netdev);
+    stats = pcan_netdev_get_stats(dev->netdev);
     #endif
 
     len += sprintf(page + len, "%2d %6s %4s %08x %03d 0x%04x %08lx %08lx %08x %08x 0x%04x\n",
@@ -396,27 +395,11 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
                    dev->dwErrorCounter,
                    dev->wCANStatus);
   }
-  
+
   len += sprintf(page + len, "\n");
-  
+
   *eof = 1;
   return len;
-}
-
-void dev_unregister(void)
-{
-#ifdef NETDEV_SUPPORT
-  struct list_head *ptr;
-  struct pcandev   *pdev;
-  // remove all netdevice registrations except those for USB-devices
-  // which is done by pcan_usb_plugout().
-  for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-  {
-    pdev = (struct pcandev *)ptr;
-    if (pdev->wType != HW_USB)
-      pcan_netdev_unregister(pdev);
-  }
-#endif
 }
 
 void remove_dev_list(void)
@@ -427,10 +410,11 @@ void remove_dev_list(void)
     dev = (struct pcandev *)pcan_drv.devices.prev; // empty in reverse order
     dev->cleanup(dev);
     list_del(&dev->list);
-    // free all device allocted memory 
+    // free all device allocted memory
     kfree(dev);
   }
 }
+
 //----------------------------------------------------------------------------
 // is called when the device is removed 'rmmod pcan'
 void cleanup_module(void)
@@ -440,11 +424,9 @@ void cleanup_module(void)
 
   switch (pcan_drv.wInitStep)
   {
-    case 3: remove_proc_entry(DEVICE_NAME, NULL);
+    case 4: remove_proc_entry(DEVICE_NAME, NULL);
+    case 3: DEV_UNREGISTER();
     case 2:
-            DEV_UNREGISTER();
-    case 1: 
-    case 0: 
             #ifdef USB_SUPPORT
             pcan_usb_deinit();
             #endif
@@ -452,10 +434,18 @@ void cleanup_module(void)
             #ifdef PCCARD_SUPPORT
             pcan_pccard_deinit();
             #endif
+    case 1:
+            #ifdef UDEV_SUPPORT
+            class_destroy(pcan_drv.class);
+            #endif
+
+            #ifdef NO_RT
+            unregister_chrdev(pcan_drv.nMajor, DEVICE_NAME);
+            #endif
 
             REMOVE_DEV_LIST();
-
-            pcan_drv.wInitStep = 0;
+    case 0:
+           pcan_drv.wInitStep = 0;
   }
 
   printk(KERN_INFO "%s: removed.\n", DEVICE_NAME);
@@ -466,8 +456,8 @@ void cleanup_module(void)
 void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
 {
   dev->wType            = wType;
-  dev->type             = szType; 
-        
+  dev->type             = szType;
+
   dev->nOpenPaths       = 0;
   dev->nLastError       = 0;
   dev->busStatus        = CAN_ERROR_ACTIVE;
@@ -478,16 +468,15 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
   dev->wBTR0BTR1        = bitrate;
   dev->ucCANMsgType     = DEFAULT_EXTENDED;
   dev->ucListenOnly     = DEFAULT_LISTENONLY;
-  
+
   memset(&dev->props, 0, sizeof(dev->props));
 
   // set default access functions
   dev->device_open      = NULL;
   dev->device_release   = NULL;
   dev->device_write     = NULL;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = NULL;
-  #endif
+
+  dev->device_params    = NULL;    // the default
 
   dev->ucPhysicallyInstalled = 0;  // assume the device is not installed
   dev->ucActivityState       = ACTIVITY_NONE;
@@ -497,6 +486,8 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
   // init fifos
   pcan_fifo_init(&dev->readFifo,   &dev->rMsg[0], &dev->rMsg[READ_MESSAGE_COUNT - 1],  READ_MESSAGE_COUNT,  sizeof(TPCANRdMsg));
   pcan_fifo_init(&dev->writeFifo,  &dev->wMsg[0], &dev->wMsg[WRITE_MESSAGE_COUNT - 1], WRITE_MESSAGE_COUNT, sizeof(TPCANMsg) );
+
+  INIT_LOCK(&dev->wlock);
 }
 
 //----------------------------------------------------------------------------
@@ -507,28 +498,28 @@ static int make_legacy_devices(void)
   int i;
 
   DPRINTK(KERN_DEBUG "%s: make_legacy_devices()\n", DEVICE_NAME);
-  
+
   for (i = 0; ((i < 8) && (type[i] != NULL)); i++)
   {
     #ifdef ISA_SUPPORT
     if (!strncmp(type[i], "isa", 4))
       result = pcan_create_isa_devices(type[i], io[i], irq[i]);
     #endif
-    
+
     #ifdef DONGLE_SUPPORT
     if (!strncmp(type[i], "sp", 4) || !strncmp(type[i], "epp", 4))
       result = pcan_create_dongle_devices(type[i], io[i], irq[i]);
     #endif
-        
+
     if (result)
       break;
   }
-  
+
   #ifdef ISA_SUPPORT
   // create lists of devices with the same irqs
   ISA_SHARED_IRQ_LISTS();
   #endif
- 
+
   return result;
 }
 
@@ -543,7 +534,7 @@ int init_module(void)
   DO_GETTIMEOFDAY(pcan_drv.sInitTime); // store time for timestamp relation, increments in usec
   pcan_drv.szVersionString = CURRENT_RELEASE; // get the release name global
   pcan_drv.nMajor          = PCAN_MAJOR;
-  
+
   printk(KERN_INFO "%s: %s\n", DEVICE_NAME, pcan_drv.szVersionString);
   printk(KERN_INFO "%s: driver config%s\n", DEVICE_NAME, current_config);
 
@@ -554,7 +545,23 @@ int init_module(void)
     strncpy(config + (sizeof(config)-sizeof(current_config))/2, current_config, sizeof(current_config)-1);
 
   INIT_LIST_HEAD(&pcan_drv.devices);
+  #ifndef NO_RT
+  INIT_LIST_HEAD(&device_list);
+  #endif
+
   pcan_drv.wDeviceCount = 0;
+
+  // register the driver by the OS
+  #ifdef NO_RT
+  if ((pcan_drv.nMajor = register_chrdev(pcan_drv.nMajor, DEVICE_NAME, &pcan_fops)) < 0)
+    goto fail;
+  #endif
+
+  #ifdef UDEV_SUPPORT
+  pcan_drv.class = class_create(THIS_MODULE , "pcan");
+  #endif
+
+  pcan_drv.wInitStep = 1;
 
   #ifdef PCI_SUPPORT
   // search pci devices
@@ -571,7 +578,7 @@ int init_module(void)
   if ((result = pcan_usb_register_devices()))
     goto fail;
   #endif
-  
+
   #ifdef PCCARD_SUPPORT
   if ((result = pcan_pccard_register_devices()))
     goto fail;
@@ -582,8 +589,8 @@ int init_module(void)
   if (!pcan_drv.wDeviceCount)
     goto fail;
   #endif
-  
-  pcan_drv.wInitStep = 1;
+
+  pcan_drv.wInitStep = 2;
 
   result = DEV_REGISTER();
   if (result < 0)
@@ -592,7 +599,7 @@ int init_module(void)
   if (!pcan_drv.nMajor)
     pcan_drv.nMajor = result;
 
-  pcan_drv.wInitStep = 2;
+  pcan_drv.wInitStep = 3;
 
   // create the proc entry
   if (create_proc_read_entry(DEVICE_NAME, 0, NULL, pcan_read_procmem, NULL) == NULL)
@@ -601,7 +608,7 @@ int init_module(void)
     goto fail;
   }
 
-  pcan_drv.wInitStep = 3;
+  pcan_drv.wInitStep = 4;
 
   printk(KERN_INFO "%s: major %d.\n", DEVICE_NAME, pcan_drv.nMajor);
   return 0; // succeed

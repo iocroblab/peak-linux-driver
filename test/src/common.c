@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2006  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com 
 // www.peak-system.com
@@ -25,7 +25,7 @@
 //
 // common.c - common parts for transmittest and receivetest
 //
-// $Id: common.c 538 2008-02-15 16:06:45Z edouard $
+// $Id: common.c 558 2009-02-03 19:05:46Z khitschler $
 //
 //****************************************************************************
 
@@ -56,7 +56,7 @@ void disclaimer(const char *prgName)
 {
   printf("\n");
   printf("%s Version \"%s\"  (www.peak-system.com)\n", prgName, current_release);
-  printf("------- Copyright (C) 2004-2007 PEAK System-Technik GmbH ------\n");
+  printf("------- Copyright (C) 2004-2009 PEAK System-Technik GmbH ------\n");
   printf("%s comes with ABSOLUTELY NO WARRANTY.     This is free\n", prgName);
   printf("software  and you are welcome  to redistribute it under certain\n");
   printf("conditions.   For   details   see    attached   COPYING   file.\n");

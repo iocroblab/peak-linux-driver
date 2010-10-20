@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2003-2008  PEAK System-Technik GmbH
+// Copyright (C) 2003-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -22,7 +22,7 @@
 //
 // Major contributions by:
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 // Contributions: Philipp Baer (philipp.baer@informatik.uni-ulm.de)
 //                Tom Heinrich
 //                John Privitera (JohnPrivitera@dciautomation.com)
@@ -32,7 +32,7 @@
 //
 // pcan_usb.c - the outer usb parts for pcan-usb support
 //
-// $Id: pcan_usb.c 534 2008-02-04 21:34:07Z khitschler $
+// $Id: pcan_usb.c 626 2010-06-16 21:37:49Z khitschler $
 //
 //****************************************************************************
 
@@ -70,7 +70,7 @@
 
 #define MAX_CYCLES_TO_WAIT_FOR_RELEASE 100  // max no. of schedules before release
 
-#define STARTUP_WAIT_TIME            2   // wait this time at startup to get first messages
+#define STARTUP_WAIT_TIME         0.01 // wait this time in seconds at startup to get first messages
 
 //****************************************************************************
 // GLOBALS
@@ -85,7 +85,7 @@ MODULE_DEVICE_TABLE (usb, pcan_usb_ids);
 #ifdef LINUX_26
 static struct usb_class_driver pcan_class =
 {
-  .name = "usb/pcan%d",
+  .name = "pcanusb%d",
   .fops = &pcan_fops,
   #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
   .mode = S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
@@ -103,113 +103,9 @@ static u16 usb_devices = 0;        // the number of accepted usb_devices
 
 //****************************************************************************
 // get cyclic data from endpoint 2
-#ifdef LINUX_26
-static void pcan_usb_write_notify(struct urb *purb, struct pt_regs *pregs);
-#else
-static void pcan_usb_write_notify(purb_t purb);
-#endif
 
-static int pcan_usb_write(struct pcandev *dev)
-{
-  int err = 0;
-  USB_PORT *u = &dev->port.usb;
-  int nDataLength;
-  int m_nCurrentLength;
-
-  DPRINTK(KERN_DEBUG "%s: pcan_usb_write()\n", DEVICE_NAME);
-
-  // don't do anything with non-existent hardware
-  if (!dev->ucPhysicallyInstalled)
-    return -ENODEV;
-
-  // improvement to control 128 bytes buffers
-  m_nCurrentLength    = URB_WRITE_BUFFER_SIZE_OLD;
-  err = pcan_hw_EncodeMessage(dev, u->pucWriteBuffer, &m_nCurrentLength);
-  if (err || (u->ucRevision < 7))
-    nDataLength = m_nCurrentLength;
-  else
-  {
-    m_nCurrentLength     = URB_WRITE_BUFFER_SIZE_OLD;
-    err = pcan_hw_EncodeMessage(dev, u->pucWriteBuffer + 64, &m_nCurrentLength);
-    nDataLength          = URB_WRITE_BUFFER_SIZE_OLD + m_nCurrentLength;    
-  }
-  
-  // fill the URB and submit
-  if (nDataLength)
-  {
-    FILL_BULK_URB(u->write_data, u->usb_dev,
-                  usb_sndbulkpipe(u->usb_dev, u->Endpoint[3].ucNumber),
-                  u->pucWriteBuffer, nDataLength, pcan_usb_write_notify, dev);
-
-    // start next urb
-    if ((err = __usb_submit_urb(u->write_data)))
-    {
-      dev->nLastError = err;
-      dev->dwErrorCounter++; 
-      DPRINTK(KERN_ERR "%s: pcan_usb_write() can't submit! (%d)",DEVICE_NAME, err);
-    }
-    else
-      atomic_inc(&dev->port.usb.active_urbs);
-  }
-
-  // it's no error if I can't get more data but still a packet was sent
-  if ((err == -ENODATA) && (nDataLength))
-    err = 0;
-
-  return err;
-}
-
-#ifdef NETDEV_SUPPORT
-static int pcan_usb_write_frame(struct pcandev *dev, struct can_frame *cf)
-{
-  int err = 0;
-  USB_PORT *u = &dev->port.usb;
-  int nDataLength;
-  int m_nCurrentLength;
-
-  DPRINTK(KERN_DEBUG "%s: %s\n", DEVICE_NAME, __FUNCTION__);
-
-  // don't do anything with non-existent hardware
-  if (!dev->ucPhysicallyInstalled)
-    return -ENODEV;
-
-  // improvement to control 128 bytes buffers
-  m_nCurrentLength    = URB_WRITE_BUFFER_SIZE_OLD;
-  err = pcan_hw_EncodeMessage_frame(dev, cf, u->pucWriteBuffer, &m_nCurrentLength);
-  if (err || (u->ucRevision < 7))
-    nDataLength = m_nCurrentLength;
-  else
-  {
-    m_nCurrentLength     = URB_WRITE_BUFFER_SIZE_OLD;
-    err = pcan_hw_EncodeMessage_frame(dev, cf, u->pucWriteBuffer + 64, &m_nCurrentLength);
-    nDataLength          = URB_WRITE_BUFFER_SIZE_OLD + m_nCurrentLength;    
-  }
-  
-  // fill the URB and submit
-  if (nDataLength)
-  {
-    FILL_BULK_URB(u->write_data, u->usb_dev,
-                  usb_sndbulkpipe(u->usb_dev, u->Endpoint[3].ucNumber),
-                  u->pucWriteBuffer, nDataLength, pcan_usb_write_notify, dev);
-
-    // start next urb
-    if ((err = __usb_submit_urb(u->write_data)))
-    {
-      dev->nLastError = err;
-      dev->dwErrorCounter++; 
-      DPRINTK(KERN_ERR "%s: pcan_usb_write_frame() can't submit! (%d)",DEVICE_NAME, err);
-    }
-    else
-      atomic_inc(&dev->port.usb.active_urbs);
-  }
-
-  // it's no error if I can't get more data but still a packet was sent
-  if ((err == -ENODATA) && (nDataLength))
-    err = 0;
-
-  return err;
-}
-#endif
+// forward declaration for chardev pcan_usb_write_notitfy()
+static int pcan_usb_write(struct pcandev *dev);
 
 //****************************************************************************
 // notify functions for read and write data
@@ -229,7 +125,7 @@ static void pcan_usb_write_notify(purb_t purb)
   atomic_dec(&dev->port.usb.active_urbs);
 
   // don't count interrupts - count packets
-  dev->dwInterruptCounter++;                                
+  dev->dwInterruptCounter++;
 
   // do write
   if (!purb->status) // stop with first error
@@ -275,7 +171,7 @@ static void pcan_usb_read_notify(purb_t purb)
   atomic_dec(&dev->port.usb.active_urbs);
 
   // don't count interrupts - count packets
-  dev->dwInterruptCounter++;                                
+  dev->dwInterruptCounter++;
 
   // do interleaving read
   if (!purb->status && dev->ucPhysicallyInstalled) // stop with first error
@@ -300,7 +196,7 @@ static void pcan_usb_read_notify(purb_t purb)
     // start next urb
     if ((err = __usb_submit_urb(purb)))
     {
-      dev->nLastError = err; 
+      dev->nLastError = err;
       dev->dwErrorCounter++;
       printk(KERN_ERR "%s: pcan_usb_read_notify() can't submit! (%d)",DEVICE_NAME, err);
     }
@@ -312,7 +208,7 @@ static void pcan_usb_read_notify(purb_t purb)
       err = pcan_hw_DecodeMessage(dev, m_pucTransferBuffer, m_nCurrentLength);
       if (err < 0)
       {
-        dev->nLastError = err; 
+        dev->nLastError = err;
         dev->wCANStatus |=  CAN_ERR_QOVERRUN;
         dev->dwErrorCounter++;
         DPRINTK(KERN_DEBUG "%s: error %d from pcan_hw_DecodeMessage()\n", DEVICE_NAME, err);
@@ -334,8 +230,62 @@ static void pcan_usb_read_notify(purb_t purb)
   }
 }
 
+
 //****************************************************************************
-// usb resource allocation 
+// USB write functions
+
+static int pcan_usb_write(struct pcandev *dev)
+{
+  int err = 0;
+  USB_PORT *u = &dev->port.usb;
+  int nDataLength;
+  int m_nCurrentLength;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_usb_write()\n", DEVICE_NAME);
+
+  // don't do anything with non-existent hardware
+  if (!dev->ucPhysicallyInstalled)
+    return -ENODEV;
+
+  // improvement to control 128 bytes buffers
+  m_nCurrentLength    = URB_WRITE_BUFFER_SIZE_OLD;
+  err = pcan_hw_EncodeMessage(dev, u->pucWriteBuffer, &m_nCurrentLength);
+  if (err || (u->ucRevision < 7))
+    nDataLength = m_nCurrentLength;
+  else
+  {
+    m_nCurrentLength     = URB_WRITE_BUFFER_SIZE_OLD;
+    err = pcan_hw_EncodeMessage(dev, u->pucWriteBuffer + 64, &m_nCurrentLength);
+    nDataLength          = URB_WRITE_BUFFER_SIZE_OLD + m_nCurrentLength;
+  }
+
+  // fill the URB and submit
+  if (nDataLength)
+  {
+    FILL_BULK_URB(u->write_data, u->usb_dev,
+                  usb_sndbulkpipe(u->usb_dev, u->Endpoint[3].ucNumber),
+                  u->pucWriteBuffer, nDataLength, pcan_usb_write_notify, dev);
+
+    // start next urb
+    if ((err = __usb_submit_urb(u->write_data)))
+    {
+      dev->nLastError = err;
+      dev->dwErrorCounter++;
+      DPRINTK(KERN_ERR "%s: pcan_usb_write() can't submit! (%d)",DEVICE_NAME, err);
+    }
+    else
+      atomic_inc(&dev->port.usb.active_urbs);
+  }
+
+  // it's no error if I can't get more data but still a packet was sent
+  if ((err == -ENODATA) && (nDataLength))
+    err = 0;
+
+  return err;
+}
+
+//****************************************************************************
+// usb resource allocation
 //
 static int pcan_usb_allocate_resources(struct pcandev *dev)
 {
@@ -416,7 +366,7 @@ static int pcan_usb_allocate_resources(struct pcandev *dev)
 }
 
 //****************************************************************************
-// usb resource de-allocation 
+// usb resource de-allocation
 //
 static int pcan_usb_free_resources(struct pcandev *dev)
 {
@@ -486,7 +436,7 @@ static int pcan_usb_start(struct pcandev *dev)
 static int pcan_kill_sync_urb(struct urb *urb)
 {
   int err = 0;
-  
+
   if (urb->status == -EINPROGRESS)
   {
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
@@ -496,7 +446,7 @@ static int pcan_kill_sync_urb(struct urb *urb)
     #endif
     DPRINTK(KERN_DEBUG "%s: pcan_kill_sync_urb done ...\n", DEVICE_NAME);
   }
-  
+
   return err;
 }
 
@@ -508,7 +458,7 @@ static int pcan_usb_stop(struct pcandev *dev)
 
   DPRINTK(KERN_DEBUG "%s: pcan_usb_stop(), minor = %d.\n", DEVICE_NAME, dev->nMinor);
 
-  err = pcan_hw_SetCANOff(dev);
+  err = pcan_hw_setCANOff(dev);
 
   // wait until all has settled
   mdelay(5);
@@ -519,7 +469,7 @@ static int pcan_usb_stop(struct pcandev *dev)
   pcan_kill_sync_urb(u->param_urb);
 
   // wait until all urbs returned to sender
-  // (I hope) this should be no problem because all urb's are unlinked 
+  // (I hope) this should be no problem because all urb's are unlinked
   while ((atomic_read(&u->active_urbs) > 0) && (i--))
     schedule();
   if (i <= 0)
@@ -531,7 +481,7 @@ static int pcan_usb_stop(struct pcandev *dev)
 }
 
 //****************************************************************************
-// remove device resources 
+// remove device resources
 //
 static int pcan_usb_cleanup(struct pcandev *dev)
 {
@@ -543,21 +493,21 @@ static int pcan_usb_cleanup(struct pcandev *dev)
 
     switch(dev->wInitStep)
     {
-      case 4: 
+      case 4:
               #ifdef NETDEV_SUPPORT
               pcan_netdev_unregister(dev);
               #endif
       case 3: usb_devices--;
               pcan_drv.wDeviceCount--;
       case 2: list_del(&dev->list);
-      case 1: 
+      case 1:
       case 0: pcan_delete_filter_chain(dev->filter);
               dev->filter = NULL;
               dev->wInitStep = 0;
               kfree(dev);
     }
   }
-  
+
   return 0;
 }
 
@@ -608,7 +558,7 @@ static int pcan_usb_device_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended,
     dev->device_release(dev);
 
   // first action: turn CAN off
-  if ((err = pcan_hw_SetCANOff(dev)))
+  if ((err = pcan_hw_setCANOff(dev)))
     goto fail;
 
   if ((err = pcan_usb_start(dev)))
@@ -628,12 +578,12 @@ static int pcan_usb_device_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended,
   mdelay(20);
 
   // last action: turn CAN on
-  if ((err = pcan_hw_SetCANOn(dev)))
+  if ((err = pcan_hw_setCANOn(dev)))
     goto fail;
-    
+
   // delay to get first messages read
   set_current_state(TASK_INTERRUPTIBLE);
-  schedule_timeout(STARTUP_WAIT_TIME * HZ);
+  schedule_timeout((int)(STARTUP_WAIT_TIME * HZ + 0.9));
 
   fail:
   return err;
@@ -655,12 +605,36 @@ static int pcan_usb_device_write(struct pcandev *dev)
   return pcan_usb_write(dev);
 }
 
-#ifdef NETDEV_SUPPORT
-static int pcan_usb_device_write_frame(struct pcandev *dev, struct can_frame *cf)
+//****************************************************************************
+// get or set special device related parameters
+static int  pcan_usb_device_params(struct pcandev *dev, TPEXTRAPARAMS *params)
 {
-  return pcan_usb_write_frame(dev, cf);
+  int err;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_usb_device_params(%d)\n", DEVICE_NAME, params->nSubFunction);
+
+  switch (params->nSubFunction)
+  {
+    case SF_GET_SERIALNUMBER:
+      err = pcan_hw_getSNR(dev, &params->func.dwSerialNumber);
+      break;
+    case SF_SET_SERIALNUMBER:
+      err = pcan_hw_setSNR(dev, params->func.dwSerialNumber);
+      break;
+    case SF_GET_HCDEVICENO:
+      err = pcan_hw_getDeviceNr(dev, &params->func.ucHCDeviceNo);
+      break;
+    case SF_SET_HCDEVICENO:
+      err = pcan_hw_setDeviceNr(dev, params->func.ucHCDeviceNo);
+      break;
+
+    default:
+      DPRINTK(KERN_DEBUG "%s: Unknown sub-function %d!\n", DEVICE_NAME, params->nSubFunction);
+      return -EINVAL;
+  }
+
+  return err;
 }
-#endif
 
 #ifndef LINUX_26
 //****************************************************************************
@@ -682,7 +656,7 @@ static int assignMinorNumber(struct pcandev *dev)
     // loop trough my devices
     for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
     {
-      devWork = (struct pcandev *)ptr;  
+      devWork = (struct pcandev *)ptr;
 
       // stop if it is occupied
       if (devWork->nMinor == searchedMinor)
@@ -691,7 +665,7 @@ static int assignMinorNumber(struct pcandev *dev)
         break;
       }
     }
-    
+
     // jump out when the first available number is found
     if (!occupied)
       break;
@@ -715,7 +689,7 @@ static int assignMinorNumber(struct pcandev *dev)
 //
 int  pcan_usb_getSerialNumber(struct pcandev *dev)
 {
-  
+
   if (dev && dev->ucPhysicallyInstalled)
     return pcan_hw_getSNR(dev, &dev->port.usb.dwSerialNumber);
   else
@@ -723,7 +697,7 @@ int  pcan_usb_getSerialNumber(struct pcandev *dev)
 }
 
 //****************************************************************************
-// things todo after plugin or plugout of device (and power on too)
+// things to do after plugin or plugout of device (and power on too)
 //
 #ifdef LINUX_26
 static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_device_id *id)
@@ -736,23 +710,23 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   struct usb_endpoint_descriptor *endpoint;
   struct usb_device *usb_dev = interface_to_usbdev(interface);
 
-  DPRINTK(KERN_DEBUG "%s: pcan_usb_plugin(0x%04x, 0x%04x)\n", DEVICE_NAME, 
+  DPRINTK(KERN_DEBUG "%s: pcan_usb_plugin(0x%04x, 0x%04x)\n", DEVICE_NAME,
           usb_dev->descriptor.idVendor, usb_dev->descriptor.idProduct);
 
   // take the 1st configuration (it's default)
-  if ((err = usb_reset_configuration (usb_dev)) < 0) 
+  if ((err = usb_reset_configuration (usb_dev)) < 0)
   {
     printk(KERN_ERR "%s: usb_set_configuration() failed!\n", DEVICE_NAME);
     goto reject;
   }
-    
+
   // only 1 interface is supported
-  if ((err = usb_set_interface (usb_dev, 0, 0)) < 0) 
+  if ((err = usb_set_interface (usb_dev, 0, 0)) < 0)
   {
     printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
     goto reject;
   }
-  
+
   // allocate memory for my device
   if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
   {
@@ -779,16 +753,13 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   dev->device_open      = pcan_usb_device_open;
   dev->device_release   = pcan_usb_device_release;
   dev->device_write     = pcan_usb_device_write;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = pcan_usb_device_write_frame;
-  #endif
 
   // init process wait queues
   init_waitqueue_head(&dev->read_queue);
   init_waitqueue_head(&dev->write_queue);
 
-  // set this before any instructions, fill struct pcandev, part 1  
-  dev->wInitStep   = 0;           
+  // set this before any instructions, fill struct pcandev, part 1
+  dev->wInitStep   = 0;
   dev->readreg     = NULL;
   dev->writereg    = NULL;
   dev->cleanup     = pcan_usb_cleanup;
@@ -797,11 +768,21 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   dev->open        = pcan_usb_open;
   dev->release     = pcan_usb_release;
   dev->filter      = pcan_create_filter_chain();
+  dev->device_params = pcan_usb_device_params;
 
   // store pointer to kernel supplied usb_dev
   u->usb_dev          = usb_dev;
+
+  #if defined(__LITTLE_ENDIAN)
   u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
   u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice >> 8);
+  #elif defined(__BIG_ENDIAN)
+  u->ucHardcodedDevNr = (u8)(usb_dev->descriptor.bcdDevice >> 8);
+  u->ucRevision       = (u8)(usb_dev->descriptor.bcdDevice & 0xff);
+  #else
+    #error  "Please fix the endianness defines in <asm/byteorder.h>"
+  #endif
+
   u->pUSBtime         = NULL;
 
   printk(KERN_INFO "%s: usb hardware revision = %d\n", DEVICE_NAME, u->ucRevision);
@@ -811,7 +792,7 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   for (i = 0; i < iface_desc->desc.bNumEndpoints; i++)
   {
     endpoint = &iface_desc->endpoint[i].desc;
-    
+
     u->Endpoint[i].ucNumber = endpoint->bEndpointAddress;
     u->Endpoint[i].wDataSz  = endpoint->wMaxPacketSize;
   }
@@ -821,16 +802,16 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
   dev->wInitStep = 1;
 
   // add into list of devices
-  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list        
+  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
   dev->wInitStep = 2;
-  
+
   // assign the device as plugged in
   dev->ucPhysicallyInstalled = 1;
 
   pcan_drv.wDeviceCount++;
-  usb_devices++; 
+  usb_devices++;
   dev->wInitStep = 3;
-  
+
   if ((err = pcan_usb_allocate_resources(dev)))
     goto reject;
 
@@ -842,25 +823,28 @@ static int pcan_usb_plugin(struct usb_interface *interface, const struct usb_dev
     usb_set_intfdata(interface, NULL);
     goto reject;
   }
-  
+
   dev->nMinor = interface->minor;
-  
+
   // get serial number early
   pcan_usb_getSerialNumber(dev);
-  
+
+  // set device in inactive state to prevent violating the bus
+  pcan_hw_setCANOff(dev);
+
   #ifdef NETDEV_SUPPORT
   pcan_netdev_register(dev);
   #endif
-  
+
   printk(KERN_INFO "%s: usb device minor %d found\n", DEVICE_NAME, dev->nMinor);
 
   return 0;
 
   reject:
   pcan_usb_cleanup(dev);
-  
+
   printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
-  
+
   return err;
 }
 #else
@@ -892,7 +876,7 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
     printk(KERN_ERR "%s: usb_set_interface() failed!\n", DEVICE_NAME);
     goto reject;
   }
-  
+
   // allocate memory for my device
   if ((dev = (struct pcandev *)kmalloc(sizeof(struct pcandev), GFP_ATOMIC)) == NULL)
   {
@@ -917,16 +901,13 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
   dev->device_open      = pcan_usb_device_open;
   dev->device_release   = pcan_usb_device_release;
   dev->device_write     = pcan_usb_device_write;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = pcan_usb_device_write_frame;
-  #endif
 
   // init process wait queues
   init_waitqueue_head(&dev->read_queue);
   init_waitqueue_head(&dev->write_queue);
 
   // set this before any instructions, fill struct pcandev, part 1
-  dev->wInitStep   = 0;           
+  dev->wInitStep   = 0;
   dev->readreg     = NULL;
   dev->writereg    = NULL;
   dev->cleanup     = pcan_usb_cleanup;
@@ -934,6 +915,8 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
   dev->free_irq    = pcan_usb_free_irq;
   dev->open        = pcan_usb_open;
   dev->release     = pcan_usb_release;
+  dev->filter      = pcan_create_filter_chain();
+  dev->device_params = pcan_usb_device_params;
 
   if ((err = assignMinorNumber(dev)))
     goto reject;
@@ -966,7 +949,7 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
   dev->ucPhysicallyInstalled = 1;
 
   pcan_drv.wDeviceCount++;
-  usb_devices++; 
+  usb_devices++;
   dev->wInitStep = 3;
 
   if ((err = pcan_usb_allocate_resources(dev)))
@@ -984,7 +967,7 @@ static void *pcan_usb_plugin(struct usb_device *usb_dev, unsigned int interface)
 
   reject:
   pcan_usb_cleanup(dev);
-  
+
   printk(KERN_ERR "%s: pcan_usb_plugin() failed! (%d)\n", DEVICE_NAME, err);
 
   return NULL;
@@ -1020,9 +1003,9 @@ static void pcan_usb_plugout(struct usb_interface *interface)
     #endif
 
     usb_set_intfdata(interface, NULL);
-    
+
     usb_deregister_dev(interface, &pcan_class);
-    
+
     // mark this device as plugged out
     dev->ucPhysicallyInstalled = 0;
 
@@ -1062,11 +1045,11 @@ static int pcan_usb_init(void)
   DPRINTK(KERN_DEBUG "%s: pcan_usb_init()\n", DEVICE_NAME);
 
   memset (&pcan_drv.usbdrv, 0, sizeof(pcan_drv.usbdrv));
-  
+
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,24) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
   pcan_drv.usbdrv.owner       = THIS_MODULE;
   #endif
-  
+
   pcan_drv.usbdrv.probe       = pcan_usb_plugin;
   pcan_drv.usbdrv.disconnect  = pcan_usb_plugout;
   pcan_drv.usbdrv.name        = DEVICE_NAME;
@@ -1103,6 +1086,6 @@ int pcan_usb_register_devices(void)
   return err;
 }
 
- 
+
 
 

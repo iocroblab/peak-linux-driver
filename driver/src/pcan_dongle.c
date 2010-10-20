@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_dongle.c 533 2008-02-04 21:31:54Z khitschler $
+// $Id: pcan_dongle.c 606 2010-02-10 19:47:16Z ohartkopp $
 //
 //****************************************************************************
 
@@ -113,8 +113,9 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   u16 _PC_ = _PB_ + 1;
   u8  b0, b1 ;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable 
+  DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;
 
-  SPIN_LOCK_IRQSAVE();
+  SPIN_LOCK_IRQSAVE(&dev->port.dng.lock);
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
   outb((port & 0x1F) | 0x80,      _PA_);
@@ -124,7 +125,7 @@ static u8 pcan_dongle_sp_readreg(struct pcandev *dev, u8 port) // read a registe
   b0=nibble_decode[inb(_PB_)>>3];
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
-  SPIN_UNLOCK_IRQRESTORE();
+  SPIN_UNLOCK_IRQRESTORE(&dev->port.dng.lock);
 
   return  (b1 << 4) | b0 ;
 }
@@ -134,8 +135,9 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   u16 _PA_ = (u16)dev->port.dng.dwPort;
   u16 _PC_ = _PA_ + 2;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
+  DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;
 
-  SPIN_LOCK_IRQSAVE();
+  SPIN_LOCK_IRQSAVE(&dev->port.dng.lock);
 
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
   outb(port & 0x1F,               _PA_);
@@ -143,7 +145,7 @@ static void pcan_dongle_writereg(struct pcandev *dev, u8 port, u8 data) // write
   outb(data,                      _PA_);
   outb((0x0B ^ 0x0D) | irqEnable, _PC_);
 
-  SPIN_UNLOCK_IRQRESTORE();
+  SPIN_UNLOCK_IRQRESTORE(&dev->port.dng.lock);
 }
 
 // functions for EPP port
@@ -153,8 +155,9 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   u16 _PC_ = _PA_ + 2;
   u8  wert;
   u8  irqEnable = inb(_PC_) & 0x10; // don't influence irqEnable
+  DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;
 
-  SPIN_LOCK_IRQSAVE();
+  SPIN_LOCK_IRQSAVE(&dev->port.dng.lock);
 
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
   outb((port & 0x1F) | 0x80,      _PA_);
@@ -162,7 +165,7 @@ static u8 pcan_dongle_epp_readreg(struct pcandev *dev, u8 port) // read a regist
   wert = inb(_PA_);
   outb((0x0B ^ 0x0F) | irqEnable, _PC_);
 
-  SPIN_UNLOCK_IRQRESTORE();
+  SPIN_UNLOCK_IRQRESTORE(&dev->port.dng.lock);
 
   return wert;
 }
@@ -357,7 +360,7 @@ static int  pcan_dongle_init(struct pcandev *dev, u32 dwPort, u16 wIrq, char *ty
   dev->release     = pcan_dongle_release; 
   dev->filter      = pcan_create_filter_chain();
 
-  spin_lock_init(&dev->port.dng.lock);
+  INIT_LOCK(&dev->port.dng.lock);
 
   // fill struct pcandev, 1st check if a default is set
   if (!dwPort)
@@ -435,9 +438,6 @@ int pcan_create_dongle_devices(char *type, u32 io, u16 irq)
   dev->device_open    = sja1000_open;
   dev->device_write   = sja1000_write;
   dev->device_release = sja1000_release;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = sja1000_write_frame;
-  #endif
   
   result = pcan_dongle_init(dev, io, irq, type);
   

@@ -26,7 +26,7 @@
 //
 // pcan_netdev.h - CAN network device support defines / prototypes
 //
-// $Id: pcan_netdev.h 524 2007-10-16 13:11:15Z ohartkopp $
+// $Id: pcan_netdev.h 607 2010-02-12 07:05:02Z ohartkopp $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>
@@ -40,7 +40,6 @@
 #include <linux/netdevice.h>
 
 #define CAN_NETDEV_NAME "can%d"
-#define TX_TIMEOUT      (50*HZ/1000) /* 50ms */ 
 
 #ifndef LINUX_26
 #define netdev_priv(dev) ((dev)->priv)
@@ -56,6 +55,7 @@ struct can_priv
   struct pcandev          *pdev; /* back reference to PCAN device */
 };
 
+struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev);
 int pcan_netdev_register(struct pcandev *dev);
 int pcan_netdev_unregister(struct pcandev *dev);
 int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv);

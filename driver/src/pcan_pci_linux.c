@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com 
@@ -67,7 +67,7 @@ static int pcan_pci_req_irq(struct pcandev *dev)
 
   if (dev->wInitStep == 5)
   {
-    if ((err = request_irq(dev->port.pci.wIrq, pcan_pci_irqhandler, IRQF_DISABLED | IRQF_SHARED, "pcan", dev)))
+    if ((err = request_irq(dev->port.pci.wIrq, pcan_pci_irqhandler, IRQF_SHARED, "pcan", dev)))
       return err;
 
     pcan_pci_enable_interrupt(dev);

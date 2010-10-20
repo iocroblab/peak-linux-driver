@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2007  PEAK System-Technik GmbH
+// Copyright (C) 2007-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -25,7 +25,7 @@
 //
 // pcan_filter.c - all about CAN message filtering
 //
-// $Id: pcan_filter.c 461 2007-02-21 23:06:52Z khitschler $
+// $Id: pcan_filter.c 600 2009-11-17 20:44:05Z khitschler $
 //
 //****************************************************************************
 
@@ -87,7 +87,7 @@ void *pcan_create_filter_chain(void)
   {
     INIT_LIST_HEAD(&chain->anchor);
     chain->count = -1;       // initial no blocking of messages to provide compatibilty
-    spin_lock_init(&chain->lock);
+    INIT_LOCK(&chain->lock);
   }
   
   return (void *)chain;
@@ -106,7 +106,7 @@ int pcan_add_filter(void *handle, u32 FromID, u32 ToID, u8 ucMSGTYPE)
   // if chain isn't set ignore it
   if (chain)
   {     
-    unsigned long flags;   // used by spin_lock_irqsave(..);
+    DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;   // used by spin_lock_irqsave(..);
     
     // test for doubly set entries
     list_for_each_safe(ptr, tmp, &chain->anchor)
@@ -133,13 +133,13 @@ int pcan_add_filter(void *handle, u32 FromID, u32 ToID, u8 ucMSGTYPE)
     pfilter->MSGTYPE = ucMSGTYPE;
     
     // add this entry to chain
-    spin_lock_irqsave(&chain->lock, flags);
+    SPIN_LOCK_IRQSAVE(&chain->lock);
     list_add_tail(&pfilter->list, &chain->anchor);
-    if (chain->count < 0) // get first start for compatility mode
+    if (chain->count < 0) // get first start for compatibility mode
       chain->count = 1;
     else
       chain->count++;
-    spin_unlock_irqrestore(&chain->lock, flags);
+    SPIN_UNLOCK_IRQRESTORE(&chain->lock);
   }
   
   return 0;
@@ -156,9 +156,9 @@ void pcan_delete_filter_all(void *handle)
 
   if (chain)
   {  
-    unsigned long flags;   // used by spin_lock_irqsave(..);
+    DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;   // used by spin_lock_irqsave(..);
     
-    spin_lock_irqsave(&chain->lock, flags);
+    SPIN_LOCK_IRQSAVE(&chain->lock);
     list_for_each_safe(ptr, tmp, &chain->anchor)
     {
       pfilter = list_entry(ptr, struct filter_element, list);
@@ -166,7 +166,7 @@ void pcan_delete_filter_all(void *handle)
       kfree(pfilter);
     }
     chain->count = 0;
-    spin_unlock_irqrestore(&chain->lock, flags);
+    SPIN_UNLOCK_IRQRESTORE(&chain->lock);
   } 
 }
 

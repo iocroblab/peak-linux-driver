@@ -1,7 +1,7 @@
 #ifndef __PCAN_PCCARD_KERNEL_H__
 #define __PCAN_PCCARD_KERNEL_H__
 //****************************************************************************
-// Copyright (C) 2006-2007  PEAK System-Technik GmbH
+// Copyright (C) 2006-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -26,14 +26,14 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //***************************************************************************
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.h 541 2008-02-18 17:48:03Z edouard $
+// $Id: pcan_pccard_kernel.h 618 2010-03-16 22:23:56Z khitschler $
 //
 //****************************************************************************
 
@@ -43,10 +43,10 @@
 #include <asm/io.h>
 #include <linux/timer.h>         // to support activity scan
 
+#include <linux/types.h>
 #include <pcmcia/cs_types.h>
 #include <pcmcia/cs.h>
 #include <pcmcia/cistpl.h>
-#include <pcmcia/cs_types.h>
 #include <pcmcia/ds.h>
 
 #include <src/pcan_main.h>
@@ -60,18 +60,18 @@
 typedef struct pcan_pccard
 {
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
-  struct pcmcia_device *pcc_dev;             // associated system pcmcia device 
+  struct pcmcia_device *pcc_dev;             // associated system pcmcia device
   #else
   dev_link_t link;
   #endif
-  ioaddr_t   basePort;                       // base of io area for all channels
+  u_int      basePort;                       // base of io area for all channels
   u_int      commonIrq;                      // irq for all channels
-  ioaddr_t   commonPort;                     // channels commonly used port 
+  u_int      commonPort;                     // channels commonly used port
   struct     pcandev *dev[PCCARD_CHANNELS];  // point to associated channels
-  
-  int       run_activity_timer_cyclic;       // a flag to synchronize stop conditions
-  struct    timer_list activity_timer;       // to scan for activity, set the time
-  
+
+  int        run_activity_timer_cyclic;       // a flag to synchronize stop conditions
+  struct     timer_list activity_timer;       // to scan for activity, set the time
+
   dev_node_t node;                           // to satisfy cardmgr needs
 } PCAN_PCCARD;
 

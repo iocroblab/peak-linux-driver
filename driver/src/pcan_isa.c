@@ -32,7 +32,7 @@
 //
 // all parts of the isa hardware for pcan-isa devices
 //
-// $Id: pcan_isa.c 518 2007-08-08 07:40:31Z edouard $
+// $Id: pcan_isa.c 606 2010-02-10 19:47:16Z ohartkopp $
 //
 //****************************************************************************
 
@@ -194,9 +194,6 @@ int pcan_create_isa_devices(char* type, u32 io, u16 irq)
   dev->device_open    = sja1000_open;
   dev->device_write   = sja1000_write;
   dev->device_release = sja1000_release;
-  #ifdef NETDEV_SUPPORT
-  dev->netdevice_write  = sja1000_write_frame;
-  #endif
 
   result = pcan_isa_init(dev, io, irq);
   if (!result)

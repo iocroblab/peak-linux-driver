@@ -1,8 +1,8 @@
 //****************************************************************************
-// Copyright (C) 2001-2007  PEAK System-Technik GmbH
+// Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com 
+// www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@
 //
 // pcan_sja1000.c - all about sja1000 init and data handling
 //
-// $Id: pcan_sja1000.c 527 2007-11-04 15:02:32Z khitschler $
+// $Id: pcan_sja1000.c 620 2010-03-28 12:44:25Z khitschler $
 //
 //****************************************************************************
 
@@ -154,13 +154,13 @@
 #define CLOCK_HZ                  16000000 // crystal frequency
 
 // time for mode register to change mode
-#define MODE_REGISTER_SWITCH_TIME 100 // msec 
+#define MODE_REGISTER_SWITCH_TIME 100 // msec
 
-// some CLKDIVIDER register contents, hardware architecture dependend 
+// some CLKDIVIDER register contents, hardware architecture dependend
 #define PELICAN_SINGLE  (CAN_MODE | CAN_BYPASS | 0x07 | CLOCK_OFF)
 #define PELICAN_MASTER  (CAN_MODE | CAN_BYPASS | 0x07            )
 #define PELICAN_DEFAULT (CAN_MODE                                )
-#define CHIP_RESET      PELICAN_SINGLE 
+#define CHIP_RESET      PELICAN_SINGLE
 
 // hardware depended setup for OUTPUT_CONTROL register
 #define OUTPUT_CONTROL_SETUP (OUTPUT_CONTROL_TRANSISTOR_P0 | OUTPUT_CONTROL_TRANSISTOR_N0 | OUTPUT_CONTROL_MODE_1)
@@ -168,7 +168,7 @@
 // the interrupt enables
 #define INTERRUPT_ENABLE_SETUP (RECEIVE_INTERRUPT_ENABLE | TRANSMIT_INTERRUPT_ENABLE | DATA_OVERRUN_INTERRUPT_ENABLE | BUS_ERROR_INTERRUPT_ENABLE | ERROR_PASSIV_INTERRUPT_ENABLE | ERROR_WARN_INTERRUPT_ENABLE)
 
-// the maximum number of handled messages in one interrupt 
+// the maximum number of handled messages in one interrupt
 #define MAX_MESSAGES_PER_INTERRUPT 8
 
 // the maximum number of handled sja1000 interrupts in 1 handler entry
@@ -193,6 +193,19 @@
 #else
   #include "pcan_sja1000_rt.c"
 #endif
+
+//----------------------------------------------------------------------------
+// guards writing sja1000's command register in multicore environments
+static inline void guarded_write_command(struct pcandev *dev, u8 data)
+{
+  DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;
+
+  SPIN_LOCK_IRQSAVE(&dev->wlock);
+  dev->writereg(dev, COMMAND, data);
+  dev->readreg(dev, CHIPSTATUS); // draw a breath after writing the command register
+  SPIN_UNLOCK_IRQRESTORE(&dev->wlock);
+  wmb();
+}
 
 //----------------------------------------------------------------------------
 // switches the chip into reset mode
@@ -238,7 +251,7 @@ static int set_normal_mode(struct pcandev *dev, u8 ucModifier)
     return -EIO;
   else
     return 0;
-} 
+}
 
 //----------------------------------------------------------------------------
 // interrupt enable and disable
@@ -281,7 +294,7 @@ int sja1000_open(struct pcandev *dev, u16 btr0btr1, u8 bExtended, u8 bListenOnly
 
   DPRINTK(KERN_DEBUG "%s: sja1000_open(), minor = %d.\n", DEVICE_NAME, dev->nMinor);
 
-  // switch to reset 
+  // switch to reset
   result = set_reset_mode(dev);
   if (result)
     goto fail;
@@ -336,7 +349,7 @@ void sja1000_release(struct pcandev *dev)
   DPRINTK(KERN_DEBUG "%s: sja1000_release()\n", DEVICE_NAME);
 
   // abort pending transmissions
-  dev->writereg(dev, COMMAND, ABORT_TRANSMISSION);
+  guarded_write_command(dev, ABORT_TRANSMISSION);
 
   // disable CAN interrupts and set chip in reset mode
   sja1000_irq_disable(dev);
@@ -398,7 +411,7 @@ static int sja1000_read_frames(SJA1000_METHOD_ARGS)
     } else {
       /* standard frame format (EFF) */
       dreg = RECEIVE_FRAME_BASE + 3;
-      
+
       localID.ul    = 0;
       #if defined(__LITTLE_ENDIAN)
       localID.uc[3] = dev->readreg(dev, RECEIVE_FRAME_BASE + 1);
@@ -439,8 +452,7 @@ static int sja1000_read_frames(SJA1000_METHOD_ARGS)
     // the receive queues, this cannot be handled inside the interrupt.
 
     // release the receive buffer
-    dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);
-    wmb();
+    guarded_write_command(dev, RELEASE_RECEIVE_BUFFER);
 
     // give time to settle
     udelay(1);
@@ -451,7 +463,7 @@ static int sja1000_read_frames(SJA1000_METHOD_ARGS)
 }
 
 //----------------------------------------------------------------------------
-// write CAN-data to chip, 
+// write CAN-data to chip,
 int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
 {
   u8 fi;
@@ -486,12 +498,6 @@ int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
     #else
       #error  "Please fix the endianness defines in <asm/byteorder.h>"
     #endif
-
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 1, (id & 0x1fe00000) >> (5 + 16));
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 2, (id & 0x001fe000) >> (5 + 8));
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 3, (id & 0x00001fe0) >> 5);
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 4, (id & 0x0000001f) << 3);
-
   } else {
     dreg = TRANSMIT_FRAME_BASE + 3;
 
@@ -506,9 +512,6 @@ int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
     #else
       #error  "Please fix the endianness defines in <asm/byteorder.h>"
     #endif
-
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 1, (id & 0x000007f8) >> 3);
-    // dev->writereg(dev, TRANSMIT_FRAME_BASE + 2, (id & 0x00000007) << 5);
   }
 
   for (i = 0; i < dlc; i++) {
@@ -518,20 +521,13 @@ int sja1000_write_frame(struct pcandev *dev, struct can_frame *cf)
   dev->writereg(dev, TRANSMIT_FRAME_BASE, fi);
 
   // request a transmission
-  dev->writereg(dev, COMMAND, TRANSMISSION_REQUEST);
-  wmb();
-
-  // strange hack to get write stall managed
-  if ((dev->readreg(dev, CHIPSTATUS) & TRANS_COMPLETE_STATUS))
-  {
-    DPRINTK(KERN_ERR "%s: Transmission finished early..., minor=%d\n", DEVICE_NAME, dev->nMinor);
-  }
+  guarded_write_command(dev, TRANSMISSION_REQUEST);
 
   return 0;
 }
 
 //----------------------------------------------------------------------------
-// write CAN-data from FIFO to chip 
+// write CAN-data from FIFO to chip
 int sja1000_write(SJA1000_METHOD_ARGS)
 {
   int        result;
@@ -588,7 +584,7 @@ int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
 
     // quick hack to badly workaround write stall
     // if ((irqstatus & TRANSMIT_INTERRUPT) || (!atomic_read(&dev->DataSendReady) && !pcan_fifo_empty(&dev->writeFifo) && (dev->readreg(dev, CHIPSTATUS) & TRANS_BUFFER_STATUS)))
-    if (irqstatus & TRANSMIT_INTERRUPT) 
+    if (irqstatus & TRANSMIT_INTERRUPT)
     {
       // handle transmission
       if ((err = SJA1000_FUNCTION_CALL(sja1000_write)))
@@ -614,8 +610,8 @@ int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
       rwakeup++;
       dev->dwErrorCounter++;
 
-      dev->writereg(dev, COMMAND, CLEAR_DATA_OVERRUN);
-      wmb();
+      guarded_write_command(dev, CLEAR_DATA_OVERRUN);
+
       dev->ucActivityState = ACTIVITY_XMIT; // reset to ACTIVITY_IDLE by cyclic timer
     }
 
@@ -629,8 +625,7 @@ int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
         dev->wCANStatus |=  CAN_ERR_QOVERRUN;
 
         // throw away last message which was refused by fifo
-        dev->writereg(dev, COMMAND, RELEASE_RECEIVE_BUFFER);
-        wmb();
+        guarded_write_command(dev, RELEASE_RECEIVE_BUFFER);
       }
 
       if (err > 0) // successfully enqueued into chardev FIFO
@@ -641,30 +636,30 @@ int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
 
     if (irqstatus & (BUS_ERROR_INTERRUPT | ERROR_PASSIV_INTERRUPT | ERROR_WARN_INTERRUPT))
     {
-      // DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), irqstatus=0x%02x\n", DEVICE_NAME, irqstatus); 
+      // DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), irqstatus=0x%02x\n", DEVICE_NAME, irqstatus);
 
       if (irqstatus & (ERROR_PASSIV_INTERRUPT | ERROR_WARN_INTERRUPT))
       {
         u8 chipstatus = dev->readreg(dev, CHIPSTATUS);
-        
+
 		// DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), chipstatus=0x%02x\n", DEVICE_NAME, chipstatus);
         switch (chipstatus & (BUS_STATUS | ERROR_STATUS))
         {
-          case 0x00: 
+          case 0x00:
                     // error active, clear only local status
                     dev->busStatus = CAN_ERROR_ACTIVE;
-                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (1)\n", DEVICE_NAME);                   
-                    dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY | CAN_ERR_BUSLIGHT); 
+                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (1)\n", DEVICE_NAME);
+                    dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY | CAN_ERR_BUSLIGHT);
                     break;
           case BUS_STATUS:
           case BUS_STATUS | ERROR_STATUS:
                     // bus-off
-                    dev->busStatus = CAN_BUS_OFF;                    
+                    dev->busStatus = CAN_BUS_OFF;
                     dev->wCANStatus |=  CAN_ERR_BUSOFF;
                     ef.can_id |= CAN_ERR_BUSOFF_NETDEV;
-                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_BUS_OFF\n", DEVICE_NAME);                   
+                    DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_BUS_OFF\n", DEVICE_NAME);
                     break;
-          case ERROR_STATUS: 
+          case ERROR_STATUS:
                     if (irqstatus & ERROR_PASSIV_INTERRUPT)
                     {
                       // either enter or leave error passive status
@@ -672,36 +667,36 @@ int sja1000_irqhandler_common(SJA1000_METHOD_ARGS)
                       {
                         // go back to error active
                         dev->busStatus = CAN_ERROR_ACTIVE;
-                        dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY); 
+                        dev->wCANStatus &=  ~(CAN_ERR_BUSOFF | CAN_ERR_BUSHEAVY);
                         dev->wCANStatus |=  CAN_ERR_BUSLIGHT;
-                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (2)\n", DEVICE_NAME);                   
+                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (2)\n", DEVICE_NAME);
                       }
                       else
                       {
                         // enter error passive state
                         dev->busStatus = CAN_ERROR_PASSIVE;
-                        dev->wCANStatus &=  ~CAN_ERR_BUSOFF; 
-                        dev->wCANStatus |=  CAN_ERR_BUSHEAVY;                     
+                        dev->wCANStatus &=  ~CAN_ERR_BUSOFF;
+                        dev->wCANStatus |=  CAN_ERR_BUSHEAVY;
                         ef.can_id  |= CAN_ERR_CRTL;
                         ef.data[1] |= (CAN_ERR_CRTL_RX_PASSIVE | CAN_ERR_CRTL_TX_PASSIVE);
-                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_PASSIVE\n", DEVICE_NAME);                   
+                        DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_PASSIVE\n", DEVICE_NAME);
                       }
                     }
                     else
                     {
                       // it was a warning limit reached event
-                      dev->busStatus = CAN_ERROR_ACTIVE;                    
-                      dev->wCANStatus |=  CAN_ERR_BUSLIGHT;                     
+                      dev->busStatus = CAN_ERROR_ACTIVE;
+                      dev->wCANStatus |=  CAN_ERR_BUSLIGHT;
                       ef.can_id  |= CAN_ERR_CRTL;
                       ef.data[1] |= (CAN_ERR_CRTL_RX_WARNING | CAN_ERR_CRTL_TX_WARNING);
-                      DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (3)\n", DEVICE_NAME);                   
+                      DPRINTK(KERN_DEBUG "%s: sja1000_irqhandler(), busStatus=CAN_ERROR_ACTIVE (3)\n", DEVICE_NAME);
                     }
                     break;
         }
       }
 
       // count each error signal even if it does not change any bus or error state
-      dev->dwErrorCounter++;        
+      dev->dwErrorCounter++;
 
       // wake up pending reads or writes
       rwakeup++;
@@ -834,7 +829,7 @@ static int sja1000_baud_rate(int rate, int flags)
     sjw = 1;
 
   // tseg even = round down, odd = round up
-  for (tseg = (0 + 0 + 2) * 2; tseg <= (MAX_TSEG2 + MAX_TSEG1 + 2) * 2 + 1; tseg++) 
+  for (tseg = (0 + 0 + 2) * 2; tseg <= (MAX_TSEG2 + MAX_TSEG1 + 2) * 2 + 1; tseg++)
   {
     brp = clock / ((1 + tseg / 2) * rate) + tseg % 2;
     if ((brp == 0) || (brp > 64))
@@ -844,7 +839,7 @@ static int sja1000_baud_rate(int rate, int flags)
     if (error < 0)
       error = -error;
 
-    if (error <= best_error) 
+    if (error <= best_error)
     {
       best_error = error;
       best_tseg = tseg/2;
@@ -853,7 +848,7 @@ static int sja1000_baud_rate(int rate, int flags)
     }
   }
 
-  if (best_error && (rate / best_error < 10)) 
+  if (best_error && (rate / best_error < 10))
   {
     DPRINTK(KERN_ERR "%s: bitrate %d is not possible with %d Hz clock\n", DEVICE_NAME, rate, 2 * clock);
 
@@ -870,7 +865,7 @@ static int sja1000_baud_rate(int rate, int flags)
 
   tseg1 = best_tseg - tseg2 - 2;
 
-  if (tseg1 > MAX_TSEG1) 
+  if (tseg1 > MAX_TSEG1)
   {
     tseg1 = MAX_TSEG1;
     tseg2 = best_tseg-tseg1-2;

@@ -1,8 +1,8 @@
 //****************************************************************************
-// Copyright (C) 2003-2007  PEAK System-Technik GmbH
+// Copyright (C) 2003-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com 
+// www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -22,14 +22,14 @@
 //
 // Major contributions by:
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//                     
+//
 //****************************************************************************
 
 //****************************************************************************
 //
 // pcan_usb-kernel.c - the inner parts for pcan-usb support
 //
-// $Id: pcan_usb_kernel.c 510 2007-05-29 13:07:10Z khitschler $
+// $Id: pcan_usb_kernel.c 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
@@ -93,7 +93,7 @@ typedef struct                               // pcan-usb parameter get an set fu
 // LOCALS
 
 //****************************************************************************
-// CODE  
+// CODE
 
 //****************************************************************************
 // functions to handle time construction
@@ -110,7 +110,7 @@ static void pcan_reset_timestamp(struct pcandev *dev)
   t->ucLastTickValue      = 0;
   t->wOldLastTickValue    = 0;
   t->StartTime.tv_sec     = 0;
-  t->StartTime.tv_usec    = 0;  
+  t->StartTime.tv_usec    = 0;
   t->wStartTicks          = 0;
 }
 
@@ -123,12 +123,12 @@ static inline void pcan_calcTimevalFromTicks(struct pcandev *dev, struct timeval
   u64 llx;
 
   llx   = t->ullCumulatedTicks - t->wStartTicks;    // subtract initial offset
-  
-  #ifdef FASTSCALE                                  
-  llx  *= SCALED_MICROSECONDS_PER_TICK;             
+
+  #ifdef FASTSCALE
+  llx  *= SCALED_MICROSECONDS_PER_TICK;
   return  (u32)(llx >>= SCALE_SHIFTER);             // unscale, shift runs faster than divide
   #else
-  llx  *= SCALE_MULTIPLIER; 
+  llx  *= SCALE_MULTIPLIER;
   return ((u32)(*(u64 *)&llx) / SCALE_DIVISOR);     // trick to circumvent missing __udivid3 entry message
   #endif
 }
@@ -160,11 +160,11 @@ static void pcan_updateTimeStampFromWord(struct pcandev *dev, u16 wTimeStamp, u8
     t->ullCumulatedTicks = t->ullOldCumulatedTicks;
     t->wLastTickValue    = t->wOldLastTickValue;
   }
-    
+
   // store current values for old ...
   t->ullOldCumulatedTicks = t->ullCumulatedTicks;
   t->wOldLastTickValue    = t->wLastTickValue;
-    
+
   if (wTimeStamp < t->wLastTickValue)  // handle wrap, enhance tolerance
     t->ullCumulatedTicks += 0x10000LL;
 
@@ -180,7 +180,7 @@ static void pcan_updateTimeStampFromByte(struct pcandev *dev, u8 ucTimeStamp)
   register PCAN_USB_TIME *t = dev->port.usb.pUSBtime;
 
   // DPRINTK(KERN_DEBUG "%s: updateTimeStampFromByte() Tim = %d, Last = %d, Cum = %lld\n", DEVICE_NAME, ucTimeStamp, t->ucLastTickValue, t->ullCumulatedTicks);
-  
+
   if (ucTimeStamp < t->ucLastTickValue)  // handle wrap
   {
     t->ullCumulatedTicks += 0x100;
@@ -215,8 +215,8 @@ static void pcan_param_xmit_notify(purb_t purb)
   atomic_set(&dev->port.usb.param_xmit_finished, 1);
 }
 
-static int pcan_hw_setcontrol_urb(struct pcandev *dev, u8 function, u8 number, 
-                             u8 param0, u8 param1, u8 param2, u8 param3,  u8 param4,  u8 param5,  u8 param6, 
+static int pcan_hw_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
+                             u8 param0, u8 param1, u8 param2, u8 param3,  u8 param4,  u8 param5,  u8 param6,
                              u8 param7, u8 param8, u8 param9, u8 param10, u8 param11, u8 param12, u8 param13)
 {
   PCAN_USB_PARAM myParameter;
@@ -255,7 +255,7 @@ static int pcan_hw_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
   #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,8)
   pt->timeout = TICKS(COMMAND_TIMEOUT);
   #endif
-  
+
   if (__usb_submit_urb(pt))
   {
     DPRINTK(KERN_ERR "%s: pcan_set_parameter() can't submit!\n",DEVICE_NAME);
@@ -268,34 +268,34 @@ static int pcan_hw_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
   // wait until submit is finished, either normal or thru timeout
   while (!atomic_read(&dev->port.usb.param_xmit_finished))
     schedule();
-  
+
   // remove urb
   nResult = pt->status;
 
   fail:
   atomic_set(&dev->port.usb.param_xmit_finished, 0);
-  
+
   return nResult;
-}     
+}
 
 static int pcan_set_function(struct pcandev *dev, u8 function, u8 number)
 {
-  DPRINTK(KERN_DEBUG "%s: pcan_set_function(%d, %d)\n", DEVICE_NAME, function, number); 
-  
+  DPRINTK(KERN_DEBUG "%s: pcan_set_function(%d, %d)\n", DEVICE_NAME, function, number);
+
   return pcan_hw_setcontrol_urb(dev, function, number, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-}  
+}
 
 // in opposition to WIN method this performs the complete write and read cycle!
-static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number, 
-                             u8 *param0, u8 *param1, u8 *param2, u8 *param3, 
+static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
+                             u8 *param0, u8 *param1, u8 *param2, u8 *param3,
                              u8 *param4, u8 *param5, u8 *param6, u8 *param7)
 {
   PCAN_USB_PARAM myParameter;
   int nResult = 0;
   register purb_t pt;
-  USB_PORT *u = &dev->port.usb;  
+  USB_PORT *u = &dev->port.usb;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getcontrol_urb(%d, %d)\n", DEVICE_NAME, function, number); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getcontrol_urb(%d, %d)\n", DEVICE_NAME, function, number);
 
   // don't do anything with non-existent hardware
   if (!dev->ucPhysicallyInstalled)
@@ -310,20 +310,20 @@ static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
   if (!nResult)
   {
     u32 startTime;
-    
+
     pt = u->param_urb;
 
     FILL_BULK_URB(pt, u->usb_dev,
                   usb_rcvbulkpipe(u->usb_dev, u->Endpoint[0].ucNumber),
                   &myParameter, sizeof(myParameter), pcan_param_xmit_notify, dev);
-  
+
     myParameter.Function = function;
     myParameter.Number   = number;
 
     #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,8)
     pt->timeout = TICKS(COMMAND_TIMEOUT);
     #endif
-    
+
     if (__usb_submit_urb (pt))
     {
       printk(KERN_ERR "%s: pcan_get_parameter() can't submit!\n",DEVICE_NAME);
@@ -343,10 +343,10 @@ static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
     #else
       usb_unlink_urb(pt); /* any better solution here for Kernel 2.4 ? */
     #endif
-      
+
     if (!pt->status)
     {
-      *param0 = myParameter.Param[0]; 
+      *param0 = myParameter.Param[0];
       *param1 = myParameter.Param[1];
       *param2 = myParameter.Param[2];
       *param3 = myParameter.Param[3];
@@ -361,7 +361,7 @@ static int pcan_hw_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
 
   fail:
   atomic_set(&u->param_xmit_finished, 0);
-  
+
   return nResult;
 }
 
@@ -374,55 +374,62 @@ static int pcan_hw_setBTR0BTR1(struct pcandev *dev, u16 wBTR0BTR1)
   u8  param0 = (u8)(wBTR0BTR1 & 0xff);
   u8  param1 = (u8)((wBTR0BTR1 >> 8) & 0xff);
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_setBTR0BTR1(0x%04x)\n", DEVICE_NAME, wBTR0BTR1); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setBTR0BTR1(0x%04x)\n", DEVICE_NAME, wBTR0BTR1);
 
-  return pcan_hw_setcontrol_urb(dev, 1, 2, param0, param1, 
+  return pcan_hw_setcontrol_urb(dev, 1, 2, param0, param1,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
-int pcan_hw_SetCANOn(struct pcandev *dev)
+int pcan_hw_setCANOn(struct pcandev *dev)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetCANOn()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setCANOn()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 3, 2, 1, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 3, 2, 1, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
-int pcan_hw_SetCANOff(struct pcandev *dev)
+int pcan_hw_setCANOff(struct pcandev *dev)
 {
   int err;
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetCANOff()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setCANOff()\n", DEVICE_NAME);
 
-  err = pcan_hw_setcontrol_urb(dev, 3, 2, 0, dummy, 
+  err = pcan_hw_setcontrol_urb(dev, 3, 2, 0, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
+  if (err) return err;
+
+  //Set SJA1000 in init mode
+  err = pcan_hw_setcontrol_urb(dev, 9, 2, 0, 1,
+                           dummy, dummy, dummy, dummy, dummy, dummy,
+                           dummy, dummy, dummy, dummy, dummy, dummy);
+
   return err;
 }
 
-static int pcan_hw_SetCANSilentOn(struct pcandev *dev)
+static int pcan_hw_setCANSilentOn(struct pcandev *dev)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetCANSilentOn()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setCANSilentOn()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 3, 3, 1, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 3, 3, 1, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
-static int pcan_hw_SetCANSilentOff(struct pcandev *dev)
+static int pcan_hw_setCANSilentOff(struct pcandev *dev)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetCANSilentOff()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setCANSilentOff()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 3, 3, 0, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 3, 3, 0, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
@@ -434,7 +441,7 @@ int pcan_hw_getBTR0BTR1(struct pcandev *dev, u16 *pwBTR0BTR1)
   u8  param0 = 0;
   u8  param1 = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getBTR0BTR1()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getBTR0BTR1()\n", DEVICE_NAME);
 
   err = pcan_hw_getcontrol_urb(dev, 1, 1, &param0, &param1, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy);
 
@@ -442,7 +449,7 @@ int pcan_hw_getBTR0BTR1(struct pcandev *dev, u16 *pwBTR0BTR1)
   *pwBTR0BTR1 <<= 8;
   *pwBTR0BTR1 |= param0;
 
-  DPRINTK(KERN_DEBUG "%s: BTR0BTR1 = 0x%04x\n", DEVICE_NAME, *pwBTR0BTR1); 
+  DPRINTK(KERN_DEBUG "%s: BTR0BTR1 = 0x%04x\n", DEVICE_NAME, *pwBTR0BTR1);
 
   return err;
 }
@@ -453,15 +460,15 @@ int pcan_hw_getQuartz(struct pcandev *dev, u32 *pdwQuartzHz)
   u8  dummy  = 0;
   u8  param0 = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getQuartz()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getQuartz()\n", DEVICE_NAME);
 
   err = pcan_hw_getcontrol_urb(dev, 2, 1, &param0, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy);
 
   *pdwQuartzHz = param0;
   *pdwQuartzHz *= 1000000L;
 
-  DPRINTK(KERN_DEBUG "%s: Frequenz = %u\n", DEVICE_NAME, *pdwQuartzHz); 
-  
+  DPRINTK(KERN_DEBUG "%s: Frequenz = %u\n", DEVICE_NAME, *pdwQuartzHz);
+
   return err;
 }
 
@@ -471,16 +478,16 @@ int pcan_hw_getAnything(struct pcandev *dev, u8 ucFunction, u8 ucNumber)
   u8  dummy[8];
   int i;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getAnything()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getAnything()\n", DEVICE_NAME);
 
   for (i = 0; i < 7; i++)
     dummy[i] = 0;
 
-  err = pcan_hw_getcontrol_urb(dev, ucFunction, ucNumber, 
+  err = pcan_hw_getcontrol_urb(dev, ucFunction, ucNumber,
                           &dummy[0], &dummy[1], &dummy[2], &dummy[3], &dummy[4], &dummy[5], &dummy[6], &dummy[7]);
 
   DPRINTK(KERN_DEBUG "%s: Fun/Num:%d/%d  0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n", DEVICE_NAME,
-          ucFunction, ucNumber, dummy[0], dummy[1], dummy[2], dummy[3], dummy[4], dummy[5], dummy[6], dummy[7]); 
+          ucFunction, ucNumber, dummy[0], dummy[1], dummy[2], dummy[3], dummy[4], dummy[5], dummy[6], dummy[7]);
 
   return err;
 }
@@ -490,60 +497,59 @@ int pcan_hw_getDeviceNr(struct pcandev *dev, u8 *pucDeviceNr)
   int err;
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getDeviceNr()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getDeviceNr()\n", DEVICE_NAME);
 
   err = pcan_hw_getcontrol_urb(dev, 4, 1, pucDeviceNr, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy);
 
-  DPRINTK(KERN_DEBUG "%s: DeviceNr = 0x%02x\n", DEVICE_NAME, *pucDeviceNr); 
+  DPRINTK(KERN_DEBUG "%s: DeviceNr = 0x%02x\n", DEVICE_NAME, *pucDeviceNr);
 
   return err;
 }
 
-int pcan_hw_SetExtVCCOn(struct pcandev *dev)
+int pcan_hw_setExtVCCOn(struct pcandev *dev)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetExtVCCOn()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setExtVCCOn()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 0xA, 2, 1, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 0xA, 2, 1, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
-int pcan_hw_SetDeviceNr(struct pcandev *dev, u8 ucDeviceNr)
+int pcan_hw_setDeviceNr(struct pcandev *dev, u8 ucDeviceNr)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetDeviceNr()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setDeviceNr()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 4, 2, ucDeviceNr, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 4, 2, ucDeviceNr, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
-int pcan_hw_SetSNR(struct pcandev *dev, u32 dwSNR)
+int pcan_hw_setSNR(struct pcandev *dev, u32 dwSNR)
 {
   u8  dummy  = 0;
+  ULCONV SNR;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetSNR()\n", DEVICE_NAME); 
+  SNR.ul = dwSNR;
 
-  return pcan_hw_setcontrol_urb(dev, 6, 2, 
-                           (u8)( dwSNR        & 0xff), 
-                           (u8)((dwSNR >>  8) & 0xff), 
-                           (u8)((dwSNR >> 16) & 0xff), 
-                           (u8)((dwSNR >> 24) & 0xff), 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setSNR()\n", DEVICE_NAME);
+
+  return pcan_hw_setcontrol_urb(dev, 6, 2, SNR.uc[3], SNR.uc[2], SNR.uc[1], SNR.uc[0],
                            dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy);
 }
 
 
-static int pcan_hw_SetExtVCCOff(struct pcandev *dev)
+static int pcan_hw_setExtVCCOff(struct pcandev *dev)
 {
   u8  dummy  = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_SetExtVCCOff()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_setExtVCCOff()\n", DEVICE_NAME);
 
-  return pcan_hw_setcontrol_urb(dev, 0xA, 2, 0, dummy, 
+  return pcan_hw_setcontrol_urb(dev, 0xA, 2, 0, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy,
                            dummy, dummy, dummy, dummy, dummy, dummy);
 }
@@ -554,18 +560,18 @@ int pcan_hw_getSNR(struct pcandev *dev, u32 *pdwSNR)
   ULCONV SNR;
   u8  dummy;
   int i = 1;
-  
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getSNR()\n", DEVICE_NAME); 
+
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_getSNR()\n", DEVICE_NAME);
 
   memset(&SNR, 0, sizeof(SNR));
-  
+
   // sometimes the hardware won't provide the number - so try twice
   do
     err = pcan_hw_getcontrol_urb(dev, 6, 1, &SNR.uc[3], &SNR.uc[2], &SNR.uc[1], &SNR.uc[0], &dummy, &dummy, &dummy, &dummy);
   while ((i--) && (err == -2));
-  
+
   *pdwSNR = SNR.ul;
-  
+
   DPRINTK(KERN_DEBUG "%s: SNR = 0x%08x\n", DEVICE_NAME, *pdwSNR);
 
   return err;
@@ -578,7 +584,7 @@ int pcan_hw_Init(struct pcandev *dev, u16 btr0btr1, u8 bListenOnly)
 {
   int err = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_Init()\n", DEVICE_NAME); 
+  DPRINTK(KERN_DEBUG "%s: pcan_hw_Init()\n", DEVICE_NAME);
 
   err = pcan_hw_setBTR0BTR1(dev, btr0btr1);
   if (err)
@@ -588,9 +594,9 @@ int pcan_hw_Init(struct pcandev *dev, u16 btr0btr1, u8 bListenOnly)
   {
     // set listen only
     if (bListenOnly)
-      err = pcan_hw_SetCANSilentOn(dev);
+      err = pcan_hw_setCANSilentOn(dev);
     else
-      err = pcan_hw_SetCANSilentOff(dev);
+      err = pcan_hw_setCANSilentOff(dev);
     if (err)
       goto fail;
   }
@@ -605,8 +611,8 @@ int pcan_hw_Init(struct pcandev *dev, u16 btr0btr1, u8 bListenOnly)
   }
 
   // don't know how to handle - walk the save way
-  err = pcan_hw_SetExtVCCOff(dev);
-  
+  err = pcan_hw_setExtVCCOff(dev);
+
   // prepare for new start of timestamp calculation
   pcan_reset_timestamp(dev);
 
@@ -630,12 +636,12 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
   u8  *org = ucMsgPtr;
   u8  dataPacketCounter = 0;
 
-  //DPRINTK(KERN_DEBUG "%s: pcan_hw_DecodeMessage(%p, %d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength); 
+  //DPRINTK(KERN_DEBUG "%s: pcan_hw_DecodeMessage(%p, %d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength);
 
   // sometimes is nothing to do
   if (!lCurrentLength)
     return err;
-  
+
   // get prefix of message and step over
   ucMsgPrefix = *ucMsgPtr++;
 
@@ -650,29 +656,29 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
     ucStatusLen = *ucMsgPtr++;
 
     // TODO: take timestamp from PCAN-USB
-    do_gettimeofday(&tv);
-      
+    DO_GETTIMEOFDAY(tv);
+
     // normal CAN message are always with timestamp
     if (!(ucStatusLen & STLN_INTERNAL_DATA))
     {
       int nRtrFrame;
       struct can_frame frame;
-            
+
       ucLen = ucStatusLen & STLN_DATA_LENGTH;
       if (ucLen > 8)
         ucLen = 8;
       frame.can_dlc = ucLen;
-      
+
       nRtrFrame = ucStatusLen & STLN_RTR;
       if (nRtrFrame)
         frame.can_id = CAN_RTR_FLAG;         // re-set to RTR value
       else
         frame.can_id = 0;                    // re-set to default value
-        
+
       if (ucStatusLen & STLN_EXTENDED_ID)
       {
         frame.can_id |= CAN_EFF_FLAG; // modify if it was extended
-        
+
         #if defined(__LITTLE_ENDIAN)
         localID.uc[0] = *ucMsgPtr++;
         localID.uc[1] = *ucMsgPtr++;
@@ -686,7 +692,7 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
         #else
           #error  "Please fix the endianness defines in <asm/byteorder.h>"
         #endif
-  
+
         localID.ul   >>= 3;
       }
       else
@@ -702,7 +708,7 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
         #else
           #error  "Please fix the endianness defines in <asm/byteorder.h>"
         #endif
-  
+
         localID.ul   >>= 5;
       }
 
@@ -720,7 +726,7 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
         #else
           #error  "Please fix the endianness defines in <asm/byteorder.h>"
         #endif
-        
+
         pcan_updateTimeStampFromWord(dev, wTimeStamp.uw, i);
       }
       else
@@ -737,10 +743,10 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
       // only for beauty, replace useless telegram content with zeros
       while (j < 8)
         frame.data[j++] = 0;
-      
+
       if ((err = pcan_xxxdev_rx(dev, &frame, &tv)) < 0) // put into data sink
-        goto fail; 
-        
+        goto fail;
+
       if (err > 0) // successfully enqueued into chardev FIFO
         rwakeup++;
 
@@ -754,9 +760,9 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
       u8 dummy;
       TPCANRdMsg msg;
       struct can_frame ef; /* error frame */
-      
+
       memset(&ef, 0, sizeof(ef));
-      
+
       // declare as status Msg
       msg.Msg.MSGTYPE = MSGTYPE_STATUS;
 
@@ -790,7 +796,7 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
         else
           pcan_updateTimeStampFromByte(dev, *ucMsgPtr++);
       }
-      
+
       switch (ucFunction)
       {
         case 1: // can_error. number = flags, special decoding in PCAN-USB
@@ -806,7 +812,7 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
           {
             dev->wCANStatus |=  CAN_ERR_BUSOFF;
             ef.can_id |= CAN_ERR_BUSOFF_NETDEV;
-            dev->dwErrorCounter++;        
+            dev->dwErrorCounter++;
           }
 
           if (ucNumber & BUS_HEAVY)
@@ -814,24 +820,24 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
             dev->wCANStatus |=  CAN_ERR_BUSHEAVY;
             ef.can_id  |= CAN_ERR_CRTL;
             ef.data[1] |= CAN_ERR_CRTL_RX_WARNING;
-            dev->dwErrorCounter++;        
+            dev->dwErrorCounter++;
           }
 
           if (ucNumber & BUS_LIGHT)
             dev->wCANStatus |= CAN_ERR_BUSLIGHT;
-          
-          // version 3: sometimes the telegram carries 3 additional data without note in ucStatusLen. 
+
+          // version 3: sometimes the telegram carries 3 additional data without note in ucStatusLen.
           // Don't know what to do ??
           j = 0;
           while (ucLen--)
             msg.Msg.DATA[j++] = *ucMsgPtr++;
           break;
         case 2: // get_analog_value, remove bytes
-          dummy = *ucMsgPtr++; 
+          dummy = *ucMsgPtr++;
           dummy = *ucMsgPtr++;
           break;
         case 3: // get_bus_load, remove byte
-          dummy = *ucMsgPtr++; 
+          dummy = *ucMsgPtr++;
           break;
         case 4: // only timestamp
           #if defined(__LITTLE_ENDIAN)
@@ -847,13 +853,13 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
           pcan_updateTimeStampFromWord(dev, wTimeStamp.uw, i);
           break;
         case 5: // ErrorFrame/ErrorBusEvent.
-          if (ucNumber & QUEUE_XMT_FULL) 
+          if (ucNumber & QUEUE_XMT_FULL)
           {
             printk(KERN_ERR "%s: QUEUE_XMT_FULL signaled, ucNumber = 0x%02x\n", DEVICE_NAME, ucNumber);
             dev->wCANStatus |= CAN_ERR_QXMTFULL; // fatal error!
             dev->dwErrorCounter++;
           }
- 
+
           j = 0;
           while (ucLen--)
             msg.Msg.DATA[j++] = *ucMsgPtr++;
@@ -861,30 +867,30 @@ int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength)
         case 10: // prepared for future
           break;
         default:
-          printk(KERN_ERR "%s: unexpected function, i = %d, ucStatusLen = 0x%02x\n", DEVICE_NAME, 
+          printk(KERN_ERR "%s: unexpected function, i = %d, ucStatusLen = 0x%02x\n", DEVICE_NAME,
                   i, ucStatusLen);
           buffer_dump(org, 4);
       }
-      
+
       /* if an error condition occurred, send an error frame to the userspace */
-      if (ef.can_id) 
+      if (ef.can_id)
       {
         ef.can_id  |= CAN_ERR_FLAG;
         ef.can_dlc  = CAN_ERR_DLC;
 
         if ((err = pcan_xxxdev_rx(dev, &ef, &tv)) < 0) // put into data sink
           goto fail;
-        
+
         if (err > 0) // successfully enqueued into chardev FIFO
           rwakeup++;
-      } 
+      }
     }
 
     // check for 'read from'-buffer overrun
     if ((ucMsgPtr - ucMsgStart) > lCurrentLength)    // must be <= dev->port.usb.Endpoint[2].wDataSz)
     {
       // sometimes version 3 overrides the buffer by 1 byte
-      if ((dev->port.usb.ucRevision > 3) || 
+      if ((dev->port.usb.ucRevision > 3) ||
           ((dev->port.usb.ucRevision <= 3) && ((ucMsgPtr - ucMsgStart) > (lCurrentLength + 1))))
       {
         err = -EFAULT;
@@ -922,8 +928,8 @@ int pcan_hw_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnDataLength)
   u8    *pucMsgCountPtr;        // pointer to MsgCount byte in URB message buffer
   int   j;                      // working counter
   u8    bFinish = 0;
-  int   nDataLength = *pnDataLength;  
-  int   nBufferTop  = nDataLength - 14;  // buffer fill high water mark 
+  int   nDataLength = *pnDataLength;
+  int   nBufferTop  = nDataLength - 14;  // buffer fill high water mark
 
   // DPRINTK(KERN_DEBUG "%s: pcan_hw_EncodeMessage() %d %d\n", DEVICE_NAME, dev->writeFifo.nStored, pcan_fifo_empty(&dev->writeFifo));
 
@@ -939,25 +945,25 @@ int pcan_hw_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnDataLength)
   {
     int nRtrFrame;
     TPCANMsg msg;                // pointer to supplied CAN message
-    
+
     // release fifo buffer and step forward in fifo
     if ((err = pcan_fifo_get(&dev->writeFifo, &msg)))
     {
       bFinish = 1;
-      
+
       if (err != -ENODATA)
       {
         DPRINTK(KERN_DEBUG "%s: can't get data out of writeFifo, avail data: %d, err: %d\n", DEVICE_NAME, dev->writeFifo.nStored, err);
       }
-        
+
       continue;
     }
-      
+
     // get ptr to ucStatusLen byte
     pucStatusLen = ptr++;
-    
+
     *pucStatusLen = ucLen = msg.LEN & STLN_DATA_LENGTH;
-      
+
     nRtrFrame = msg.MSGTYPE & MSGTYPE_RTR;
     if (nRtrFrame)
       *pucStatusLen |= STLN_RTR;  // add RTR flag
@@ -1029,105 +1035,3 @@ int pcan_hw_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnDataLength)
 
   return err;
 }
-
-#ifdef NETDEV_SUPPORT
-// writes a CAN-Frame pointed to by *cf into USB buffer ucMsgPtr
-// returns -ENODATA and *pnDataLength > 0 if I made a telegram and no more data are available
-//         -ENODATA and *pnDataLength == 0 if I made no telegram and no more data are available
-//         any ERROR else if something happend
-//         no ERROR if I made a telegram and there are more data available
-int pcan_hw_EncodeMessage_frame(struct pcandev *dev, struct can_frame *cf, u8 *ucMsgPtr, int *pnDataLength)
-{
-  int nMsgCounter = 0;          // counts the messages stored in this URB packet
-  u8  *ptr        = ucMsgPtr;   // work pointer into write buffer
-  u8  ucLen;                    // CAN data length
-  ULCONV localID;               // for easy endian conversion
-  u8    *pucStatusLen;          // pointer to ucStatusLen byte in URB message buffer
-  u8    *pucMsgCountPtr;        // pointer to MsgCount byte in URB message buffer
-  int   j;                      // working counter
-  int   nDataLength = *pnDataLength;  
-
-  DPRINTK(KERN_DEBUG "%s: pcan_hw_EncodeMessage_frame() %d %d\n", DEVICE_NAME, dev->writeFifo.nStored, pcan_fifo_empty(&dev->writeFifo));
-
-  // indicate no packet
-  *pnDataLength = 0;
-
-  // put packet type information
-  *ptr++ = 2;
-  pucMsgCountPtr = ptr++;  // fill later the count of messages
-
-  // pack packet
-
-  // get ptr to ucStatusLen byte
-  pucStatusLen = ptr++;
-      
-  *pucStatusLen = ucLen = cf->can_dlc & STLN_DATA_LENGTH;
-        
-  if (cf->can_id & CAN_RTR_FLAG)
-    *pucStatusLen |= STLN_RTR;  // add RTR flag
-
-  if (cf->can_id & CAN_EFF_FLAG)
-  {
-    localID.ul = cf->can_id & CAN_EFF_MASK;
-    *pucStatusLen |= STLN_EXTENDED_ID;
-    localID.ul   <<= 3;
-
-    #if defined(__LITTLE_ENDIAN)
-    *ptr++ = localID.uc[0];
-    *ptr++ = localID.uc[1];
-    *ptr++ = localID.uc[2];
-    *ptr++ = localID.uc[3];
-    #elif defined(__BIG_ENDIAN)
-    *ptr++ = localID.uc[3];
-    *ptr++ = localID.uc[2];
-    *ptr++ = localID.uc[1];
-    *ptr++ = localID.uc[0];
-    #else
-      #error  "Please fix the endianness defines in <asm/byteorder.h>"
-    #endif
-  }
-  else
-  {
-    localID.ul = cf->can_id & CAN_SFF_MASK;
-    localID.ul   <<= 21;
-
-    #if defined(__LITTLE_ENDIAN)
-    *ptr++ = localID.uc[2];
-    *ptr++ = localID.uc[3];
-    #elif defined(__BIG_ENDIAN)
-    *ptr++ = localID.uc[3];
-    *ptr++ = localID.uc[2];
-    #else
-      #error  "Please fix the endianness defines in <asm/byteorder.h>"
-    #endif
-  }
-
-  // put data
-  j = 0;
-  while (ucLen--)
-    *ptr++ = cf->data[j++];
-
-  nMsgCounter++;
-
-  // generate external nDataLength if I carry payload
-  if ((ptr - ucMsgPtr) > 2)
-  {
-    *pnDataLength = nDataLength;
-
-    // set count of telegrams
-    ptr = ucMsgPtr + nDataLength - 1;
-    *ptr = (u8)(dev->port.usb.dwTelegramCount++ & 0xff);
-
-    // last to do: put count of messages
-    *pucMsgCountPtr = nMsgCounter;
-  }
-  else
-  {
-    *pnDataLength   = 0;
-    *pucMsgCountPtr = 0;
-  }
-
-  return -ENODATA; /* simulate empty fifo return value */
-}
-
-#endif
