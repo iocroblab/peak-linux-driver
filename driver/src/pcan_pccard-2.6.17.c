@@ -32,7 +32,7 @@
 // system dependend parts to handle pcan-pccard
 // special code for kernels greater and equal than 2.6.17
 //
-// $Id: pcan_pccard-2.6.17.c 612 2010-02-13 20:00:51Z khitschler $
+// $Id: pcan_pccard-2.6.17.c 638 2011-01-12 13:15:30Z stephane $
 //
 //****************************************************************************
 
@@ -220,6 +220,7 @@ static int pccard_plugin(struct pcmcia_device *link)
   else
     printk(KERN_INFO "%s: %s %s %s %s\n", DEVICE_NAME, link->prod_id[0], link->prod_id[1], link->prod_id[2], link->prod_id[3]);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
   /* exclusive irq lines are not supported up from 2.6.28 */
   link->irq.Attributes = IRQ_TYPE_DYNAMIC_SHARING;
   link->irq.Handler    = NULL;                     // we use our own handler
@@ -228,6 +229,15 @@ static int pccard_plugin(struct pcmcia_device *link)
     printk(KERN_WARNING "%s: pcmcia_request_irq() = %d!", DEVICE_NAME, last_ret);
     goto fail;
   }
+#else
+  /* see Documentation/pcmcia/driver-changes.txt:  */
+
+  /* Instead of the old pcmcia_request_irq() interface, drivers may now */
+  /* choose between: */
+  /* - calling request_irq/free_irq directly. Use the IRQ from *p_dev->irq. */
+
+  /* (this the job of pccard_create_all_devices() call below) */
+#endif
 
   link->conf.Attributes = CONF_ENABLE_IRQ;
   link->conf.IntType    = INT_MEMORY_AND_IO;
@@ -238,6 +248,7 @@ static int pccard_plugin(struct pcmcia_device *link)
     goto fail;
   }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
   DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq.AssignedIRQ);
 
   // init (cardmgr) devices associated with that card (is that necessary?)
@@ -245,10 +256,18 @@ static int pccard_plugin(struct pcmcia_device *link)
   card->node.minor = PCCARD_MINOR_BASE;
   strcpy(card->node.dev_name, DEVICE_NAME);
   link->dev_node = &card->node;
+#else
+  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq);
+#endif
 
-  // create device descriptors associated with the card - get relevant parts to get independend from dev_link_t
+  // create device descriptors associated with the card - get relevant parts to get independent from dev_link_t
   card->basePort  = link->io.BasePort1;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35)
+  card->commonIrq = link->irq;
+#else
   card->commonIrq = link->irq.AssignedIRQ;
+#endif
+
   last_ret = pccard_create_all_devices(card);
   if (last_ret)
     goto fail;

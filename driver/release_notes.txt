@@ -1,0 +1,2 @@
+2011-01-12 - v6.24 - content:
+- Handle PCMCIA cards in v2.6.35 kernel

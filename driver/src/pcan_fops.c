@@ -34,7 +34,7 @@
 //
 // pcan_fops.c - all file operation functions, exports only struct fops
 //
-// $Id: pcan_fops.c 603 2010-02-08 16:46:32Z ohartkopp $
+// $Id: pcan_fops.c 629 2010-08-12 20:05:12Z khitschler $
 //
 //****************************************************************************
 
@@ -92,7 +92,7 @@
 MODULE_AUTHOR("klaus.hitschler@gmx.de");
 MODULE_DESCRIPTION("Driver for PEAK-Systems CAN interfaces.");
 MODULE_VERSION(CURRENT_RELEASE);
-MODULE_SUPPORTED_DEVICE("PCAN-ISA, PCAN-PC/104, PCAN-Dongle, PCAN-PCI, PCAN-PCCard, PCAN-USB (compilation dependent)");
+MODULE_SUPPORTED_DEVICE("PCAN-ISA, PCAN-PC/104, PCAN-Dongle, PCAN-PCI(e), PCAN-ExpressCard, PCAN-PCCard, PCAN-USB (compilation dependent)");
 MODULE_LICENSE("GPL");
 
 #if defined(module_param_array) && LINUX_VERSION_CODE > KERNEL_VERSION(2,6,13)

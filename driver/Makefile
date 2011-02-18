@@ -1,5 +1,5 @@
 #****************************************************************************
-# Copyright (C) 2001-2008  PEAK System-Technik GmbH
+# Copyright (C) 2001-2010  PEAK System-Technik GmbH
 #
 # linux@peak-system.com
 # www.peak-system.com
@@ -12,7 +12,7 @@
 #
 # Makefile for Peak CAN interface drivers (ISA, PC/104, PCI, DONGLE, USB, PCCARD)
 #
-# $Id: Makefile 542 2008-02-19 08:10:31Z edouard $
+# $Id: Makefile 638 2011-01-12 13:15:30Z stephane $
 #
 #****************************************************************************
 
@@ -28,10 +28,11 @@
 # make options:
 # DBG=DEBUG                 or NO_DEBUG    		  switch debug on and switches Makefile verbosity on
 # KERNEL_LOCATION=...       where your kernel sources are located if not standard location (cross-compile)
-# MOD=NO_MODVERSIONS		or MODVERSIONS 		  compile for modversions use
-# PAR=NO_PARPORT_SUBSYSTEM	or PARPORT_SUBSYSTEM  compile for use without parport subsystem und pcan-dongle
-# USB=NO_USB_SUPPORT 		or USB_SUPPORT    	  compile for use with USB and pcan-usb
-# PCI=NO_PCI_SUPPORT        or PCI_SUPPORT        compile for use with PCAN-PCI
+# MOD=NO_MODVERSIONS        or MODVERSIONS 		  compile for modversions use
+# PAR=NO_PARPORT_SUBSYSTEM  or PARPORT_SUBSYSTEM  compile for use without parport subsystem und pcan-dongle
+# USB=NO_USB_SUPPORT        or USB_SUPPORT    	  compile for use with USB and pcan-usb
+# PCI=NO_PCI_SUPPORT        or PCI_SUPPORT        compile for use with PCAN-PCI or PCAN-PCIe
+# PCIEC=NO_PCIEC_SUPPORT    or PCIEC_SUPPORT      compile for use with PCI-Expresscard
 # DNG=NO_DONGLE_SUPPORT     or DONGLE_SUPPORT     compile for use with PCAN-DONGLE
 # ISA=NO_ISA_SUPPORT        or ISA_SUPPORT        compile for use with PCAN-ISA or PCAN-104
 # PCC=NO_PCCARD_SUPPORT     or PCCARD_SUPPORT     compile for use with PCAN-PCCARD
@@ -50,10 +51,34 @@
 KERNEL_LOCATION = $(KERNEL_DIR)
 
 #****************************************************************************
+# probe various standard kernel locations
+#
+ifneq ($(shell if test -d $(KERNEL_LOCATION) ; then echo "true" ; fi), true)
+
+# ubuntu
+ifeq ($(shell if test -d "/usr/src/linux-headers-`uname -r`" ; then echo "true" ; fi), true)
+KERNEL_LOCATION = $(shell echo "/usr/src/linux-headers-`uname -r`")
+endif
+
+# plain vanilla kernel @ /usr/src
+ifeq ($(shell if test -d "/usr/src/linux-`uname -r`" ; then echo "true" ; fi), true)
+KERNEL_LOCATION = $(shell echo "/usr/src/linux-`uname -r`")
+endif
+
+endif
+
+#****************************************************************************
 # removed old kernel source path retrival for support of kernels < 2.2.18!
 # old KERNSRC = /lib/modules/$(VERSION)/build
 #
 KERNSRC := $(KERNEL_LOCATION)
+
+#****************************************************************************
+# determine where to find the kernel built header files
+#
+HEADER_PATH := $(shell if test -d $(KERNEL_LOCATION)/include/generated ; \
+                 then echo "$(KERNEL_LOCATION)/include/generated" ;      \
+                 else echo "$(KERNEL_LOCATION)/include/linux"     ; fi )
 
 #****************************************************************************
 # whole makefile is based on availability of version.h file
@@ -69,11 +94,11 @@ else
 # removed old version retrival for better cross compile support
 # old VERSION := $(shell uname -r)
 #
-VERSION := $(shell cpp -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/version.h \
+VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/version.h \
             | grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
 
 ifeq ($(VERSION),)
-VERSION := $(shell cpp -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/utsrelease.h \
+VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include $(HEADER_PATH)/utsrelease.h \
             | grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
 endif
 
@@ -100,6 +125,7 @@ MOD     = MODVERSIONS
 PAR     = PARPORT_SUBSYSTEM
 USB     = USB_SUPPORT
 PCI     = PCI_SUPPORT
+PCIEC   = PCIEC_SUPPORT
 DNG     = DONGLE_SUPPORT
 ISA     = ISA_SUPPORT
 PCC     = PCCARD_SUPPORT
@@ -123,12 +149,34 @@ ifeq ($(DBG),DEBUG)
 VERBOSE = 1
 endif
 
+#****************************************************************************
+# switch make verbosity on
+#
+ifneq ($(PCI),PCI_SUPPORT)      # no pci means no PCAN-Expresscard support
+PCIEC = NO_PCIEC_SUPPORT
+endif
+
+#****************************************************************************
+# bo PCAN-Expresscard support for kernels 2.4.x
+#
+ifeq ($(USEKBUILD),no)         # not for kernel 2.4.x
+PCIEC = NO_PCIEC_SUPPORT
+endif
+
+#****************************************************************************
+# Test current system for UDEV support influence only for installation
+#
+UDEV   := $(shell if test -d /etc/udev/rules.d ; then echo yes ; else echo no; fi )
+
 ifeq ($(RT), XENOMAI)
 #****************************************************************************
 # Define flags for XENOMAI installation only
 #
-USB = NO_USB_SUPPORT
-PCC = NO_PCCARD_SUPPORT
+USB   = NO_USB_SUPPORT
+PCC   = NO_PCCARD_SUPPORT
+NET   = NO_NETDEV_SUPPORT
+PCIEC = NO_PCIEC_SUPPORT
+UDEV  = no
 
 SKIN = xeno
 RT_DIR          ?= /usr/xenomai
@@ -143,8 +191,11 @@ ifeq ($(RT), RTAI)
 #****************************************************************************
 # Define flags for RTAI installation only
 #
-USB = NO_USB_SUPPORT
-PCC = NO_PCCARD_SUPPORT
+USB   = NO_USB_SUPPORT
+PCC   = NO_PCCARD_SUPPORT
+NET   = NO_NETDEV_SUPPORT
+PCIEC = NO_PCIEC_SUPPORT
+UDEV  = no
 
 SKIN = module
 RT_DIR          ?= /usr/realtime
@@ -160,13 +211,13 @@ ifeq ($(NET), AUTO_NETDEV_SUPPORT)
 # Auto configure netdev support when kernel is compiled with CONFIG_CAN
 #
 
-HASAUTOCONF_H := $(shell if test -f $(KERNEL_LOCATION)/include/linux/autoconf.h ; then echo yes ; else echo no; fi )
+HASAUTOCONF_H := $(shell if test -f $(HEADER_PATH)/autoconf.h ; then echo yes ; else echo no; fi )
 
 ifeq ($(HASAUTOCONF_H),no)
-$(error "AUTO_NETDEV_SUPPORT: Can't find $(KERNEL_LOCATION)/include/linux/autoconf.h !")
+$(error "AUTO_NETDEV_SUPPORT: Can't find $(HEADER_PATH)/autoconf.h !")
 else
 
-SOCKETCAN := $(shell cpp -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/autoconf.h | grep -c CONFIG_CAN)
+SOCKETCAN := $(shell cpp -dM -I$(KERNEL_LOCATION)/include $(HEADER_PATH)/autoconf.h | grep -c CONFIG_CAN)
 
 ifeq ($(SOCKETCAN),0)
 NET = NO_NETDEV_SUPPORT
@@ -188,6 +239,10 @@ pcan-objs += $(SRC)/pcan_parse.o $(SRC)/pcan_sja1000.o $(SRC)/pcan_common.o
 
 ifeq ($(PCI),PCI_SUPPORT)
 pcan-objs += $(SRC)/pcan_pci.o
+endif
+
+ifeq ($(PCIEC),PCIEC_SUPPORT)
+pcan-objs += $(SRC)/pcan_pciec.o 
 endif
 
 ifeq ($(ISA),ISA_SUPPORT)
@@ -215,8 +270,12 @@ ifeq ($(USEKBUILD),yes) # <<<<< USEKBUILD >>>>>>
 #****************************************************************************
 # for local installation only: sometimes /etc/modprobe.conf.local is used
 #
-MODCONF = /etc/modprobe.conf
-MODINST = "install pcan /sbin/modprobe --ignore-install pcan; /usr/local/bin/pcan_make_devices 2"
+MODCONF := $(shell if test -d /etc/modprobe.d ; then echo "/etc/modprobe.d/pcan.conf" ; else echo "/etc/modules.conf.local" ; fi )
+ifeq ($(UDEV), yes)
+MODINST  = "install pcan /sbin/modprobe --ignore-install pcan"
+else
+MODINST  = "install pcan /sbin/modprobe --ignore-install pcan; /usr/local/bin/pcan_make_devices 2"
+endif
 
 #****************************************************************************
 # what's the target
@@ -227,7 +286,7 @@ obj-m := pcan.o
 #****************************************************************************
 # add flags to standard flags
 #
-_CFLAGS += -I$(IWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
+_CFLAGS += -I$(PWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it in another way for kernels less than 2.6.5
@@ -245,7 +304,6 @@ endif # <<<<< USESUBDIRS >>>>>>
 # do it
 #
 all : message
-	pwd > $(TMPWKD)
 	$(CMDLINE)
 
 else # <<<<< USEKBUILD >>>>>>
@@ -262,7 +320,7 @@ DEP     = .depend
 #****************************************************************************
 # for local installation only: sometimes /etc/modules.conf.local is used
 #
-MODCONF = /etc/modules.conf
+MODCONF = "/etc/modules.conf"
 MODINST = "post-install pcan /usr/local/bin/pcan_make_devices 2"
 
 #****************************************************************************
@@ -273,7 +331,7 @@ TARGET = pcan.o
 #****************************************************************************
 # compile flags
 #
-CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
+CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC)-D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it
@@ -311,22 +369,38 @@ mrproper: clean
 endif # <<<<< USEKBUILD >>>>>>
 
 #********** this entry is reserved for root access only *********************
-install:
-	@if test -d $(INSTALL_LOCATION) ; then echo "info: $(INSTALL_LOCATION) exists."; else mkdir $(INSTALL_LOCATION); fi
-	cp $(TARGET) $(INSTALL_LOCATION)/$(TARGET)
-	cp pcan_make_devices /usr/local/bin/pcan_make_devices
-	if test -z $(shell grep -l pcan $(MODCONF)); then\
-		cp $(MODCONF) $(MODCONF)~;\
+compat:
+	@if [ -f /etc/modprobe.d/pcan ] ; then \
+	mv /etc/modprobe.d/pcan /etc/modprobe.d/pcan.conf ; \
+	echo "Info: Moved /etc/modprobe.d/pcan to /etc/modprobe.d/pcan.conf for compatibility reason."; \
+	fi
+
+install: compat
+	@if test -d $(INSTALL_LOCATION) ; then echo "Info: $(INSTALL_LOCATION) exists."; else mkdir $(INSTALL_LOCATION); fi
+	@cp -f $(TARGET) $(INSTALL_LOCATION)/$(TARGET)
+	@cp -f pcan_make_devices /usr/local/bin
+	@chmod 744 /usr/local/bin/pcan_make_devices
+	@if [ ! -f $(MODCONF) ] || test -z $(shell grep -ls pcan $(MODCONF)) ; then\
+		cp $(MODCONF) $(MODCONF)~ 2> /dev/NULL;\
 		echo ""                                               >> $(MODCONF);\
 		echo "# pcan - automatic made entry, begin --------"  >> $(MODCONF);\
-		echo "# options pcan $(PARMS)   # see documentation"  >> $(MODCONF);\
+		echo "# if required add options and remove comment "  >> $(MODCONF);\
+		echo "# options pcan $(PARMS)                      "  >> $(MODCONF);\
 		echo $(MODINST)                                       >> $(MODCONF);\
 		echo "# pcan - automatic made entry, end ----------"  >> $(MODCONF);\
 		echo ""                                               >> $(MODCONF);\
+	else\
+		echo "Info: Left current 'pcan'-entry in $(MODCONF) untouched.";\
 	fi
-	/sbin/depmod
-	cp pcan.h /usr/include/pcan.h
-	chmod 644 /usr/include/pcan.h
+	@if [ $(UDEV) = "yes" ]; then\
+		cp -f udev/45-pcan.rules /etc/udev/rules.d ; /sbin/udevadm control --reload-rules; \
+		echo "Info: Copied 45-pcan.rules to /etc/udev/rules.d.";\
+	else\
+		echo "Info: No UDEV installation found.";\
+	fi
+	@/sbin/depmod
+	@cp -f pcan.h /usr/include/pcan.h
+	@chmod 644 /usr/include/pcan.h
 
 #********** informations during build of driver *****************************
 .PHONY : message

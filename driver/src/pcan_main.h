@@ -37,7 +37,7 @@
 //
 // pcan_main.h - global defines to include in all files this module is made of
 //
-// $Id: pcan_main.h 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_main.h 634 2010-09-26 20:44:05Z khitschler $
 //
 //****************************************************************************
 
@@ -72,6 +72,11 @@
 #include <pcmcia/cs.h>
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
+#endif
+
+#ifdef PCIEC_SUPPORT
+#include <linux/i2c.h>
+#include <linux/i2c-algo-bit.h>
 #endif
 
 #ifdef USB_SUPPORT
@@ -147,10 +152,10 @@ struct pcanctx_rt;
 #define CAN_ERROR_PASSIVE    1          // receive only state
 #define CAN_BUS_OFF          2          // switched off from Bus
 
-typedef struct chn_props                                   // this structure holds various channel properties
+typedef struct chn_props                // this structure holds various channel properties
 {
-  u8 ucExternalClock : 1;                                  // this device is supplied with a external clock
-  u8 ucMasterDevice  : 2;                                  // this channel is a clock master, slave, single
+  u8 ucExternalClock : 1;               // this device is supplied with a external clock
+  u8 ucMasterDevice  : 2;               // this channel is a clock master, slave, single
 } CHN_PROPS;
 
 // a helper for fast conversion between 'SJA1000' data ordering and host data order
@@ -181,6 +186,24 @@ typedef struct
   spinlock_t lock;                                         // mutual exclusion lock
 } FIFO_MANAGER;
 
+#ifdef PCIEC_SUPPORT
+#define PCIEC_CHANNELS 2                                   // maximum PCAN-PCIExpressCard channel number
+
+typedef struct
+{
+  void       *gpoutenable;                                 // virtual adresses for bit-banging interface
+  void       *gpin;
+  void       *gpout;
+  struct     pcandev *dev[PCIEC_CHANNELS];                 // point to associated channels
+  struct     i2c_adapter adapter;                          // associated i2c adapter for PCAN-Expresscard
+  struct     i2c_algo_bit_data algo_data;                  // we have a bit banging interface with PCAN-Expresscard
+  u8         VCCenable;                                    // reflection of VCCEN
+  u8         PCA9553_LS0Shadow;                            // Shadow register to hold the state of the LEDs
+  int        run_activity_timer_cyclic;                    // a flag to synchronize stop conditions
+  struct     timer_list activity_timer;                    // to scan for activity, set the time
+} PCAN_PCIEC_CARD;
+#endif
+
 typedef struct
 {
   u32  dwPort;                                             // the port of the transport layer
@@ -189,6 +212,10 @@ typedef struct
   void *pvVirtConfigPort;                                  // only PCI, the virtual address of the config port
   u16  wIrq;                                               // the associated irq level
   int  nChannel;                                           // associated channel of the card - channel #0 is special
+  struct pci_dev *pciDev;                                  // remember the hosting PCI card
+  #ifdef PCIEC_SUPPORT
+  PCAN_PCIEC_CARD *card;                                   // point to a card structure
+  #endif
 } PCI_PORT;
 
 typedef struct
@@ -216,7 +243,7 @@ typedef struct
 {
   struct list_head same_irq_items;                         // base of list of SAME_IRQ_ITEM's
   u16  same_irq_count;                                     // count of devices with the same irq level to handle
-  u16  same_irq_active;                                     // count of armed (active) irqs
+  u16  same_irq_active;                                    // count of armed (active) irqs
 } SAME_IRQ_LIST;
 #endif
 
