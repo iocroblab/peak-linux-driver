@@ -53,8 +53,8 @@ kdist_config: prep-deb-files
 kdist_clean: prep-deb-files
 	dh_testdir
 	dh_clean
-	$(MAKE) -C driver/ $(MFLAGS) clean
-	$(MAKE) -C lib/ $(MFLAGS) clean
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) $(MAKE) -C driver/ $(MFLAGS) clean
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) $(MAKE) -C lib/ $(MFLAGS) clean
 #	rm -f driver/*.o driver/*.ko
 #
 ### end  KERNEL SETUP
@@ -81,10 +81,11 @@ binary-modules: prep-deb-files
 	dh_prep
 	dh_installdirs lib/modules/$(KVERS)/misc
 
-	$(ROOT_CMD) $(MAKE) KERNEL_DIR=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT $(MAKE) PCC=NO_PCCARD_SUPPORT -C driver/
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT $(MAKE) -C lib/
 
 	# Install the module
-	install -m 0644 pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/misc ;
+	install -m 0644 driver/pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/misc ;
 
 	# Build the module
 	#$(MAKE) -C driver KERNEL_DIR=$(KSRC) KVERS=$(KVERS)
@@ -124,7 +125,7 @@ build: build-arch build-indep
 clean:
 	dh_testdir
 	-rm -f build-arch-stamp build-indep-stamp configure-stamp
-	$(MAKE) clean KERNEL_DIR=$(KSRC) KVERS=$(KVERS)
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) $(MAKE) clean
 	-rm lib/libpcan.so
 	dh_clean
 
@@ -268,7 +269,7 @@ binary: binary-indep binary-arch
 
 	# Install the module
 ##	install -m 0644 pcan.ko debian/$(PKGNAME)/lib/modules/$(KVERS)/misc ; \
-	
+
 ##	dh_installmodules
 ##	dh_installdocs
 ##	dh_installchangelogs

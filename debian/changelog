@@ -1,3 +1,13 @@
+peak-linux-driver (6.24-1) unstable; urgency=low
+
+  * New upstream version.
+  * Patch comment_ioctl.
+  * Set KERNEL_DIR and KERNEL_LOCATION.
+  * Disable PCCARD support. (cs_types.h and cs.h not available for 2.6.37)
+  * Set debian/source/format to 3.0 (quilt)
+  * Removed ${shlibs:Depends}
+ -- Markus Becker <mab@comnets.uni-bremen.de>  Wed, 18 Feb 2011 11:26:33 +0200
+
 peak-linux-driver (6.20-1) unstable; urgency=low
 
   * New upstream version

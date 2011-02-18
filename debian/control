@@ -10,7 +10,7 @@ Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
 
 Package: peak-linux-driver-utils
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${misc:Depends}
 Description: PEAK-System CAN utils
  This package provides the tools pcan_make_devices and wstress from PEAK-System.
 
