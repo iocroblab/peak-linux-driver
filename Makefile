@@ -1,5 +1,5 @@
 #****************************************************************************
-# Copyright (C) 2001-2006  PEAK System-Technik GmbH
+# Copyright (C) 2001-2010  PEAK System-Technik GmbH
 #
 # linux@peak-system.com
 # www.peak-system.com
@@ -19,15 +19,34 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #
 # Maintainer(s): Klaus Hitschler (klaus.hitschler@gmx.de)
+# Contributions: Pablo Yanez Trujillo (yanez@pse.de) cross-compile
 #****************************************************************************
 
 #****************************************************************************
 #
 # Makefile - global Makefile for all components
 #
-# $Id: Makefile 369 2006-03-30 20:52:10Z khitschler $
+# $Id: Makefile 611 2010-02-13 19:58:25Z khitschler $
 #
 #****************************************************************************
+
+#****************************************************************************
+# CROSS-COMPILING SETTINGS
+#
+# You need a cross-compiler. You can build one with crosstool
+# http://www.kegel.com/crosstool/current/doc/crosstool-howto.html
+#
+# These variables work with the toolchains created by crosstool
+
+# defines the architecture. For example 'arm' for an ARM system
+#export ARCH=arm
+
+# the path and prefix of the cross-compiler
+#export CROSS_COMPILE=/home/yanez/matrix500/arm-9tdmi-linux-gnu/bin/arm-9tdmi-linux-gnu-
+
+ifneq ($(CROSS_COMPILE),)
+  export CC=$(CROSS_COMPILE)gcc
+endif
 
 #****************************************************************************
 # MACROS AND DEFINES

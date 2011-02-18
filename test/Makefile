@@ -1,5 +1,5 @@
 #****************************************************************************
-# Copyright (C) 2001-2006  PEAK System-Technik GmbH
+# Copyright (C) 2001-2010  PEAK System-Technik GmbH
 #
 # linux@peak-system.com
 # www.peak-system.com
@@ -25,7 +25,7 @@
 #
 # Makefile - Makefile for receivetest and transmittest programs
 #
-# $Id: Makefile 518 2007-08-08 07:40:31Z edouard $
+# $Id: Makefile 616 2010-02-14 22:41:17Z khitschler $
 #
 #****************************************************************************
 
@@ -68,6 +68,11 @@ else
   LDLIBS  = -L../lib -L/lib -L/usr/lib -L/usr/local/lib
 endif
 
+# enabling corss-compile from ../Makefile
+ifneq ($(CROSS_COMPILE),)
+  LDLIBS  = -L../lib
+endif
+
 ifneq ($(RT), NO_RT)
 DBGFLAGS   =
 else
@@ -80,12 +85,20 @@ else
 CFLAGS  = $(INC) $(LDLIBS)
 endif
 
-
+# take different source files for realtime and 'normal' test programms
+ifeq ($(RT), NO_RT)
 TARGET1 = receivetest
 FILES1  = $(SRC)/$(TARGET1).c $(SRC)/common.c
 
 TARGET2 = transmitest
 FILES2  = $(SRC)/$(TARGET2).cpp $(SRC)/common.c $(SRC)/parser.cpp
+else
+TARGET1 = receivetest
+FILES1  = $(SRC)/$(TARGET1)_rt.c $(SRC)/common.c
+
+TARGET2 = transmitest
+FILES2  = $(SRC)/$(TARGET2)_rt.cpp $(SRC)/common.c $(SRC)/parser.cpp
+endif
 
 TARGET3 = bitratetest
 FILES3  = $(SRC)/$(TARGET3).c $(SRC)/common.c
@@ -93,7 +106,11 @@ FILES3  = $(SRC)/$(TARGET3).c $(SRC)/common.c
 TARGET4 = filtertest
 FILES4  = $(SRC)/$(TARGET4).cpp $(SRC)/common.c
 
-all:    $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4)
+TARGET5 = pcan-settings
+FILES5  = $(SRC)/$(TARGET5).c
+
+
+all:    $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5)
 
 $(TARGET1): $(FILES1)
 	$(CC) $(FILES1) $(CFLAGS) -o $(TARGET1) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) $(USERAPP_LIBS) -D$(RT)
@@ -106,16 +123,20 @@ $(TARGET3): $(FILES3)
 
 $(TARGET4): $(FILES4)
 	$(CC) $(FILES4) $(CFLAGS) -o $(TARGET4) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) $(USERAPP_LIBS) -lstdc++ -D$(RT)
-	
 
+$(TARGET5): $(FILES5)
+	$(CC) $(FILES5) $(CFLAGS) -o $(TARGET5) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) -lpopt -g
+
+	
 clean:
-	rm -f $(SRC)/*~ $(SRC)/*.o *~ $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4)
+	rm -f $(SRC)/*~ $(SRC)/*.o *~ $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5)
 	
 install:
 	cp $(TARGET1) /usr/local/bin
 	cp $(TARGET2) /usr/local/bin
 	cp $(TARGET3) /usr/local/bin
 	cp $(TARGET4) /usr/local/bin
+	cp $(TARGET5) /usr/local/bin
 
 
 

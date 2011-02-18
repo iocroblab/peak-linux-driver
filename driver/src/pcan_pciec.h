@@ -1,11 +1,11 @@
-#ifndef __PCAN_PCI_H__
-#define __PCAN_PCI_H__
+#ifndef __PCAN_PCIEC_H__
+#define __PCAN_PCIEC_H__
 
 //****************************************************************************
 // Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com 
+// www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -23,18 +23,13 @@
 //
 // Maintainer(s): Klaus Hitschler (klaus.hitschler@gmx.de)
 //
-// Major contributions by:
-//                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
-//                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
-//                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
-//
 //****************************************************************************
 
 //****************************************************************************
 //
-// all parts to handle device interface specific for pcan-pci
+// all parts to handle device interface specific for PCAN-PCIExpressCard
 //
-// $Id: pcan_pci.h 634 2010-09-26 20:44:05Z khitschler $
+// $Id: pcan_pciec.h 635 2010-09-26 20:47:38Z khitschler $
 //
 //****************************************************************************
 
@@ -43,14 +38,12 @@
 #include <src/pcan_main.h>
 
 //****************************************************************************
-// DEFINES
-#ifdef PCIEC_SUPPORT
-int  pcan_pci_init(void);
-void pcan_pci_deinit(void);
-#else
-int  pcan_search_and_create_pci_devices(void);
-#endif
+// PROTOTYPES
+PCAN_PCIEC_CARD *pcan_pciec_create_card(struct pci_dev *pciDev, struct pcandev *dev);
+PCAN_PCIEC_CARD *pcan_pciec_locate_card(struct pci_dev *pciDev, struct pcandev *dev);
+void             pcan_pciec_delete_card(struct pcandev *dev);
 
-void pcan_pci_clear_stored_interrupt(struct pcandev *dev);
-void pcan_pci_enable_interrupt(struct pcandev *dev);
-#endif // __PCAN_PCI_H__
+void pcan_setVCCEN(PCAN_PCIEC_CARD *card, int On);
+
+#endif // __PCAN_PCIEC_H__
+

@@ -36,7 +36,7 @@
 // pcan_main.c - the starting point of the driver,
 //               init and cleanup and proc interface
 //
-// $Id: pcan_main.c 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_main.c 634 2010-09-26 20:44:05Z khitschler $
 //
 //****************************************************************************
 
@@ -405,13 +405,19 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
 void remove_dev_list(void)
 {
   struct pcandev *dev;
-  while (!list_empty(&pcan_drv.devices)) // cycle through the list of devices and remove them
+  struct list_head *pos;
+  struct list_head *n;
+
+  list_for_each_prev_safe(pos, n, &pcan_drv.devices)
   {
-    dev = (struct pcandev *)pcan_drv.devices.prev; // empty in reverse order
-    dev->cleanup(dev);
-    list_del(&dev->list);
-    // free all device allocted memory
-    kfree(dev);
+    dev = list_entry(pos, struct pcandev, list);
+    if (dev->cleanup != NULL)
+    {
+      dev->cleanup(dev);
+      list_del(&dev->list);
+      // free all device allocated memory
+      kfree(dev);
+    }
   }
 }
 
@@ -434,6 +440,10 @@ void cleanup_module(void)
             #ifdef PCCARD_SUPPORT
             pcan_pccard_deinit();
             #endif
+
+            #ifdef PCIEC_SUPPORT
+            pcan_pci_deinit();
+            #endif
     case 1:
             #ifdef UDEV_SUPPORT
             class_destroy(pcan_drv.class);
@@ -444,6 +454,7 @@ void cleanup_module(void)
             #endif
 
             REMOVE_DEV_LIST();
+
     case 0:
            pcan_drv.wInitStep = 0;
   }
@@ -475,6 +486,7 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
   dev->device_open      = NULL;
   dev->device_release   = NULL;
   dev->device_write     = NULL;
+  dev->cleanup          = NULL;
 
   dev->device_params    = NULL;    // the default
 
@@ -537,6 +549,9 @@ int init_module(void)
 
   printk(KERN_INFO "%s: %s\n", DEVICE_NAME, pcan_drv.szVersionString);
   printk(KERN_INFO "%s: driver config%s\n", DEVICE_NAME, current_config);
+  #ifdef DEBUG
+  printk(KERN_INFO "%s: DEBUG is switched on\n", DEVICE_NAME);
+  #endif
 
   // Copy the centered string only one time and use sizeof() for
   // compiletime value calculation and optimisation. Also ensure
@@ -553,8 +568,12 @@ int init_module(void)
 
   // register the driver by the OS
   #ifdef NO_RT
-  if ((pcan_drv.nMajor = register_chrdev(pcan_drv.nMajor, DEVICE_NAME, &pcan_fops)) < 0)
+  result = register_chrdev(pcan_drv.nMajor, DEVICE_NAME, &pcan_fops);
+  if (result < 0)
     goto fail;
+  else
+    if (!pcan_drv.nMajor)
+      pcan_drv.nMajor = result;
   #endif
 
   #ifdef UDEV_SUPPORT
@@ -564,9 +583,14 @@ int init_module(void)
   pcan_drv.wInitStep = 1;
 
   #ifdef PCI_SUPPORT
-  // search pci devices
+  #ifdef PCIEC_SUPPORT
+  if ((result = pcan_pci_init()))
+    goto fail;
+  #else
   if ((result = pcan_search_and_create_pci_devices()))
     goto fail;
+  #endif
+  // search pci devices
   #endif
 
   // create isa and dongle devices

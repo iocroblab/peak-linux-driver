@@ -31,7 +31,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 613 2010-02-13 20:03:42Z khitschler $
+// $Id: pcan_pccard_kernel.c 638 2011-01-12 13:15:30Z stephane $
 //
 //****************************************************************************
 
@@ -41,7 +41,11 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
 #include <asm/io.h>
+#else
+#include <linux/io.h>
+#endif
 #include <linux/types.h>
 #include <linux/timer.h>         // to support activity scan
 #include <linux/slab.h>

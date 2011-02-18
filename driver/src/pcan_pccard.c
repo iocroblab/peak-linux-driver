@@ -31,7 +31,7 @@
 //
 // system dependend parts to handle pcan-pccard
 //
-// $Id: pcan_pccard.c 550 2009-01-18 22:16:52Z khitschler $
+// $Id: pcan_pccard.c 638 2011-01-12 13:15:30Z stephane $
 //
 //****************************************************************************
 
@@ -78,7 +78,7 @@ MODULE_DEVICE_TABLE(pcmcia, pccard_id_table);
 #endif
 
 //****************************************************************************
-// unfortunately to get readdable code all the code was put into 2 files
+// unfortunately to get readable code all the code was put into 2 files
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
 #include "src/pcan_pccard-2.6.17.c"
 #else

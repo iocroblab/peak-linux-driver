@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.h 618 2010-03-16 22:23:56Z khitschler $
+// $Id: pcan_pccard_kernel.h 638 2011-01-12 13:15:30Z stephane $
 //
 //****************************************************************************
 
@@ -59,11 +59,11 @@
 
 typedef struct pcan_pccard
 {
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
   struct pcmcia_device *pcc_dev;             // associated system pcmcia device
   #else
   dev_link_t link;
-  #endif
+#endif
   u_int      basePort;                       // base of io area for all channels
   u_int      commonIrq;                      // irq for all channels
   u_int      commonPort;                     // channels commonly used port
@@ -72,7 +72,10 @@ typedef struct pcan_pccard
   int        run_activity_timer_cyclic;       // a flag to synchronize stop conditions
   struct     timer_list activity_timer;       // to scan for activity, set the time
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
   dev_node_t node;                           // to satisfy cardmgr needs
+#endif
+
 } PCAN_PCCARD;
 
 int  pccard_create_all_devices(struct pcan_pccard *card);

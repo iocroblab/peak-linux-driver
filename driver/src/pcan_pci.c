@@ -1,5 +1,5 @@
 //****************************************************************************
-// Copyright (C) 2001-2009  PEAK System-Technik GmbH
+// Copyright (C) 2001-2010  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
 // www.peak-system.com
@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pci
 //
-// $Id: pcan_pci.c 606 2010-02-10 19:47:16Z ohartkopp $
+// $Id: pcan_pci.c 637 2010-10-24 20:51:10Z khitschler $
 //
 //****************************************************************************
 
@@ -50,6 +50,10 @@
 #include <src/pcan_sja1000.h>
 #include <src/pcan_filter.h>
 
+#ifdef PCIEC_SUPPORT
+#include <src/pcan_pciec.h>
+#endif
+
 //****************************************************************************
 // DEFINES
 #define PCAN_PCI_MINOR_BASE 0        // the base of all pci device minors
@@ -59,8 +63,9 @@
 #define PITA_GPIOICR     0x18        // general purpose IO interface control register
 #define PITA_MISC        0x1C        // miscellanoes register
 
-#define PCAN_PCI_VENDOR_ID   0x001C  // the PCI device and vendor IDs
-#define PCAN_PCI_DEVICE_ID   0x0001
+#define PEAK_PCI_VENDOR_ID   0x001C  // the PCI device and vendor IDs
+#define PEAK_PCI_DEVICE_ID   0x0001  // ID for PCI / PCIe Slot cards
+#define PEAK_PCIE_CARD_ID    0x0002  // ID for PCIExpress Card
 
 #define PCI_CONFIG_PORT_SIZE 0x1000  // size of the config io-memory
 #define PCI_PORT_SIZE        0x0400  // size of a channel io-memory
@@ -74,10 +79,14 @@
 #ifdef UDEV_SUPPORT
 static struct pci_device_id pcan_pci_tbl[] =
 {
-  {PCAN_PCI_VENDOR_ID, PCAN_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+  {PEAK_PCI_VENDOR_ID, PEAK_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+  #ifdef PCIEC_SUPPORT
+  {PEAK_PCI_VENDOR_ID, PEAK_PCIE_CARD_ID,  PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+  #endif
   {0, }
 };
 
+#ifndef PCIEC_SUPPORT
 static int pcan_pci_register_driver(struct pci_driver *p_pci_drv)
 {
   p_pci_drv->name     = DEVICE_NAME;
@@ -90,6 +99,7 @@ static void pcan_pci_unregister_driver(struct pci_driver *p_pci_drv)
 {
   pci_unregister_driver(p_pci_drv);
 }
+#endif
 
 MODULE_DEVICE_TABLE(pci, pcan_pci_tbl);
 #endif
@@ -178,21 +188,25 @@ static int pcan_pci_cleanup(struct pcandev *dev)
   switch(dev->wInitStep)
   {
     case 6: pcan_pci_free_irq(dev);
-    case 5: _pci_devices--;
+    case 5:
+            #ifdef PCIEC_SUPPORT
+            pcan_pciec_delete_card(dev);
+            #endif
+            _pci_devices--;
     case 4: iounmap(dev->port.pci.pvVirtPort);
-    case 3:
-           release_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE);
+    case 3: release_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE);
     case 2: if (dev->port.pci.nChannel == 0)
               iounmap(dev->port.pci.pvVirtConfigPort);
-    case 1:
-            if (dev->port.pci.nChannel == 0)
+    case 1: if (dev->port.pci.nChannel == 0)
               release_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE);
     case 0: pcan_delete_filter_chain(dev->filter);
            dev->filter = NULL;
            dev->wInitStep = 0;
            #ifdef UDEV_SUPPORT
-           if (_pci_devices == 0)
-             pcan_pci_unregister_driver(&pcan_drv.pci_drv);
+           #ifndef PCIEC_SUPPORT
+            if (_pci_devices == 0)
+              pcan_pci_unregister_driver(&pcan_drv.pci_drv);
+           #endif
            #endif
   }
 
@@ -202,19 +216,21 @@ static int pcan_pci_cleanup(struct pcandev *dev)
 // interface depended open and close
 static int pcan_pci_open(struct pcandev *dev)
 {
+  dev->ucActivityState = ACTIVITY_IDLE;
   return 0;
 }
 
 static int pcan_pci_release(struct pcandev *dev)
 {
+  dev->ucActivityState = ACTIVITY_INITIALIZED;
   return 0;
 }
 
-static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16 wIrq, struct pcandev *master_dev)
+static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16 wIrq, struct pcandev *master_dev)
 {
-  DPRINTK(KERN_DEBUG "%s: pcan_pci_init(), _pci_devices = %d\n", DEVICE_NAME, _pci_devices);
+  DPRINTK(KERN_DEBUG "%s: pcan_pci_channel_init(), _pci_devices = %d\n", DEVICE_NAME, _pci_devices);
 
-  dev->props.ucMasterDevice = CHANNEL_MASTER; // obsoloete - will be removed soon
+  dev->props.ucMasterDevice = CHANNEL_MASTER; // obsolete - will be removed soon
 
   // init process wait queues
   init_waitqueue_head(&dev->read_queue);
@@ -224,7 +240,9 @@ static int  pcan_pci_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16
   dev->wInitStep   = 0;
   dev->readreg     = pcan_pci_readreg;
   dev->writereg    = pcan_pci_writereg;
+  #ifndef PCIEC_SUPPORT
   dev->cleanup     = pcan_pci_cleanup;
+  #endif
   dev->req_irq     = pcan_pci_req_irq;
   dev->free_irq    = pcan_pci_free_irq;
   dev->open        = pcan_pci_open;
@@ -313,10 +331,15 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
   local_dev->device_write      = sja1000_write;
   local_dev->device_release    = sja1000_release;
   local_dev->port.pci.nChannel = nChannel;
+  local_dev->port.pci.pciDev   = NULL;
 
   local_dev->props.ucExternalClock = 1;
 
-  result = pcan_pci_init(local_dev, (u32)pciDev->resource[0].start,
+  #ifdef PCIEC_SUPPORT
+  local_dev->port.pci.card     = NULL; // card pointer must be NULL for all but PCAN-Expresscard
+  #endif
+
+  result = pcan_pci_channel_init(local_dev, (u32)pciDev->resource[0].start,
              (u32)pciDev->resource[1].start + nChannel * 0x400,  (u16)pciDev->irq, master_dev);
 
   if (!result)
@@ -331,6 +354,18 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
   else
   {
     local_dev->ucPhysicallyInstalled = 1;
+    local_dev->port.pci.pciDev       = pciDev;
+
+    #ifdef PCIEC_SUPPORT
+    if (pciDev->device == PEAK_PCIE_CARD_ID)  // we have a card with i2c controlled blinking LED
+    {
+      if (local_dev->port.pci.nChannel == 0)  // master channel
+        local_dev->port.pci.card = pcan_pciec_create_card(pciDev, local_dev);
+      else
+        local_dev->port.pci.card = pcan_pciec_locate_card(pciDev, local_dev);
+    }
+    #endif
+
     list_add_tail(&local_dev->list, &pcan_drv.devices);  // add this device to the list
     pcan_drv.wDeviceCount++;
     *dev = local_dev;
@@ -345,6 +380,106 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
   return result;
 }
 
+#ifdef PCIEC_SUPPORT  // move to event driven creation of devices, not for kernels 2.4.x
+static int __devinit pcan_pci_probe(struct pci_dev *pciDev, const struct pci_device_id *ent)
+{
+  int result                 = 0;
+  struct pcandev *dev        = NULL;
+  struct pcandev *master_dev = NULL;
+  u16 wSubSysID;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_pci_probe(%p)\n", DEVICE_NAME, pciDev);
+
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
+  result = pci_enable_device(pciDev);
+  if (result)
+    goto fail;
+  #endif
+
+  // get the PCI Subsystem-ID
+  result = pci_read_config_word(pciDev, PCI_SUBSYSTEM_ID, &wSubSysID);
+  if (result)
+    goto fail;
+
+  // configure the PCI chip, part 1
+  result = pci_write_config_word(pciDev, PCI_COMMAND, 2);
+  if (result)
+    goto fail;
+
+  result = pci_write_config_word(pciDev, 0x44, 0);
+  if (result)
+    goto fail;
+  wmb();
+
+  // add the 1st channel per card
+  if ((result = create_one_pci_device(pciDev, 0, NULL, &dev)))
+    goto fail;
+  master_dev = dev;
+
+  if (wSubSysID >=4)   // add a 2nd channel per card
+    if ((result = create_one_pci_device(pciDev, 1, master_dev, &dev)))
+      goto fail;
+
+  if (wSubSysID >= 10) // add a 3rd channel per card
+    if ((result = create_one_pci_device(pciDev, 2, master_dev, &dev)))
+      goto fail;
+
+  if (wSubSysID >= 12) // add the 4th channel per card
+    result = create_one_pci_device(pciDev, 3, master_dev, &dev);
+
+  fail:
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
+  if (result)
+    pci_disable_device (pciDev);
+  #endif
+
+  return result;
+}
+
+static void __devexit pcan_pci_remove(struct pci_dev *pciDev)
+{
+  struct pcandev *dev;
+  struct list_head *pos;
+  struct list_head *n;
+
+  DPRINTK(KERN_DEBUG "%s: pcan_pci_remove(%p)\n", DEVICE_NAME, pciDev);
+
+  list_for_each_prev_safe(pos, n, &pcan_drv.devices)
+  {
+    dev = list_entry(pos, struct pcandev, list);
+    if ((dev->wType == HW_PCI) && (dev->port.pci.pciDev = pciDev))
+    {
+      pcan_pci_cleanup(dev);
+      list_del(&dev->list);
+      dev->ucPhysicallyInstalled = 0; // TODO: a much better hack to address plugging out while a path to the device is open
+
+      // free all device allocated memory
+      kfree(dev);
+    }
+  }
+
+  pci_disable_device(pciDev);
+}
+
+int pcan_pci_init(void)
+{
+  DPRINTK(KERN_DEBUG "%s: pcan_pci_init()\n", DEVICE_NAME);
+
+  pcan_drv.pci_drv.name     = DEVICE_NAME;
+  pcan_drv.pci_drv.id_table = pcan_pci_tbl;
+  pcan_drv.pci_drv.probe    = pcan_pci_probe;
+  pcan_drv.pci_drv.remove   = pcan_pci_remove;
+
+  return pci_register_driver(&pcan_drv.pci_drv);
+}
+
+void pcan_pci_deinit(void)
+{
+  DPRINTK(KERN_DEBUG "%s: pcan_pci_deinit()\n", DEVICE_NAME);
+
+  pci_unregister_driver(&pcan_drv.pci_drv);
+}
+#else
 //----------------------------------------------------------------------------
 // search all pci based devices from peak
 int pcan_search_and_create_pci_devices(void)
@@ -354,7 +489,7 @@ int pcan_search_and_create_pci_devices(void)
   struct pcandev *master_dev = NULL;
 
   // search pci devices
-  DPRINTK(KERN_DEBUG "%s: search_and_create_pci_devices()\n", DEVICE_NAME);
+  DPRINTK(KERN_DEBUG "%s: pcan_search_and_create_pci_devices()\n", DEVICE_NAME);
   #ifdef LINUX_26
   if (CONFIG_PCI)
   #else
@@ -362,57 +497,62 @@ int pcan_search_and_create_pci_devices(void)
   #endif
   {
     struct pci_dev *pciDev;
+    int n = sizeof(pcan_pci_tbl) / sizeof(pcan_pci_tbl[0]) - 1;
+    int i;
 
-    struct pci_dev *from = NULL;
-    do
+    for (i = 0; i < n; i++)
     {
-      pciDev = pci_find_device((unsigned int)PCAN_PCI_VENDOR_ID, (unsigned int)PCAN_PCI_DEVICE_ID, from);
-
-      if (pciDev != NULL)
+      struct pci_dev *from = NULL;
+      do
       {
-        u16 wSubSysID;
+        pciDev = pci_find_device(pcan_pci_tbl[i].vendor, pcan_pci_tbl[i].device, from);
 
-        // a PCI device with PCAN_PCI_VENDOR_ID and PCAN_PCI_DEVICE_ID was found
-        from = pciDev;
+        if (pciDev != NULL)
+        {
+          u16 wSubSysID;
 
-        #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
-        if (pci_enable_device(pciDev))
-          continue;
-        #endif
+          // a PCI device with PCAN_PCI_VENDOR_ID and PCAN_PCI_DEVICE_ID was found
+          from = pciDev;
 
-        // get the PCI Subsystem-ID
-        result = pci_read_config_word(pciDev, 0x2E, &wSubSysID);
-        if (result)
-          goto fail;
+          #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
+          if (pci_enable_device(pciDev))
+            continue;
+          #endif
 
-        // configure the PCI chip, part 1
-        result = pci_write_config_word(pciDev, 0x04, 2);
-        if (result)
-          goto fail;
+          // get the PCI Subsystem-ID
+          result = pci_read_config_word(pciDev, PCI_SUBSYSTEM_ID, &wSubSysID);
+          if (result)
+            goto fail;
 
-        result = pci_write_config_word(pciDev, 0x44, 0);
-        if (result)
-          goto fail;
-        wmb();
+          // configure the PCI chip, part 1
+          result = pci_write_config_word(pciDev, PCI_COMMAND, 2);
+          if (result)
+            goto fail;
 
-        // 1 channel per card
-        if ((result = create_one_pci_device(pciDev, 0, NULL, &dev))) goto fail;
-        master_dev = dev;
+          result = pci_write_config_word(pciDev, 0x44, 0);
+          if (result)
+            goto fail;
+          wmb();
 
-        if (wSubSysID >=4)   // add a 2nd channel per card
-          if ((result = create_one_pci_device(pciDev, 1, master_dev, &dev))) goto fail;
-        if (wSubSysID >= 10) // add a 3rd channel per card
-          if ((result = create_one_pci_device(pciDev, 2, master_dev, &dev))) goto fail;
-        if (wSubSysID >= 12) // add the 4th channel per card
-          result = create_one_pci_device(pciDev, 3, master_dev, &dev);
+          // 1 channel per card
+          if ((result = create_one_pci_device(pciDev, 0, NULL, &dev))) goto fail;
+          master_dev = dev;
 
-        fail:
-        #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
-        if (result)
-          pci_disable_device (pciDev);
-        #endif
-      }
-    } while ((pciDev != NULL) && !result);
+          if (wSubSysID >=4)   // add a 2nd channel per card
+            if ((result = create_one_pci_device(pciDev, 1, master_dev, &dev))) goto fail;
+          if (wSubSysID >= 10) // add a 3rd channel per card
+            if ((result = create_one_pci_device(pciDev, 2, master_dev, &dev))) goto fail;
+          if (wSubSysID >= 12) // add the 4th channel per card
+            result = create_one_pci_device(pciDev, 3, master_dev, &dev);
+
+          fail:
+          #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10)
+          if (result)
+            pci_disable_device (pciDev);
+          #endif
+        }
+      } while ((pciDev != NULL) && !result);
+    }
 
     DPRINTK(KERN_DEBUG "%s: search_and_create_pci_devices() is OK\n", DEVICE_NAME);
 
@@ -424,6 +564,8 @@ int pcan_search_and_create_pci_devices(void)
 
   return result;
 }
+#endif
+
 
 
 
