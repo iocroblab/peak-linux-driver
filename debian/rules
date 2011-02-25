@@ -81,7 +81,7 @@ binary-modules: prep-deb-files
 	dh_prep
 	dh_installdirs lib/modules/$(KVERS)/misc
 
-	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT $(MAKE) PCC=NO_PCCARD_SUPPORT -C driver/
+	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT $(MAKE) -C driver/
 	KERNEL_DIR=$(KSRC) KERNEL_LOCATION=$(KSRC) KVERS=$(KVERS) NET=NETDEV_SUPPORT $(MAKE) -C lib/
 
 	# Install the module

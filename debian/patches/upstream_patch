@@ -1,0 +1,273 @@
+Index: peak-linux-driver/driver/release_notes.txt
+===================================================================
+--- peak-linux-driver.orig/driver/release_notes.txt	2011-02-25 15:54:27.000000000 +0100
++++ peak-linux-driver/driver/release_notes.txt	2011-02-25 15:56:14.000000000 +0100
+@@ -1,2 +1,8 @@
+-2011-01-12 - v6.24 - content:
+-- Handle PCMCIA cards in v2.6.35 kernel
++2011-01-12 - 6.24 - content:
++- Handle PCMCIA cards in 2.6.35 kernel
++
++2011-01-18 - 6.24.2 - content:
++- Support 2.6.37 kernel
++
++2011-02-11 - 6.24.3 - content:
++- Support 2.6.37 kernel and PCMCIA
+Index: peak-linux-driver/driver/src/pcan_common.h
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_common.h	2011-02-25 15:54:42.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_common.h	2011-02-25 15:56:14.000000000 +0100
+@@ -185,7 +185,7 @@
+ #define CURRENT_RELEASE "Release_20110113_n"  // $name$
+ #define PCAN_VERSION_MAJOR             6
+ #define PCAN_VERSION_MINOR             24
+-#define PCAN_VERSION_SUBMINOR          0
++#define PCAN_VERSION_SUBMINOR          3
+ #define CURRENT_VERSIONSTRING          __stringify(PCAN_VERSION_MAJOR)"."__stringify(PCAN_VERSION_MINOR)"."__stringify(PCAN_VERSION_SUBMINOR)
+ 
+ 
+Index: peak-linux-driver/driver/src/pcan_fops_linux.c
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_fops_linux.c	2011-02-25 15:54:48.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_fops_linux.c	2011-02-25 15:56:14.000000000 +0100
+@@ -422,7 +422,11 @@
+ 
+ //----------------------------------------------------------------------------
+ // is called at user ioctl() call
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+ int pcan_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigned long arg)
++#else
++long pcan_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
++#endif
+ {
+   int err;
+   struct fileobj *fobj = (struct fileobj *)filep->private_data;
+@@ -741,7 +745,11 @@
+   release:    pcan_release,
+   read:       pcan_read,
+   write:      pcan_write,
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+   ioctl:      pcan_ioctl,
++#else
++  unlocked_ioctl: pcan_ioctl,
++#endif
+   poll:       pcan_poll,
+ };
+ 
+Index: peak-linux-driver/driver/src/pcan_main.h
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_main.h	2011-02-25 15:54:57.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_main.h	2011-02-25 15:56:14.000000000 +0100
+@@ -68,8 +68,12 @@
+ #endif
+ 
+ #ifdef PCCARD_SUPPORT
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+ #include <pcmcia/cs_types.h>
++#endif
+ #include <pcmcia/cs.h>
++#endif
+ #include <pcmcia/cistpl.h>
+ #include <pcmcia/ds.h>
+ #endif
+Index: peak-linux-driver/driver/src/pcan_pccard-2.6.17.c
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_pccard-2.6.17.c	2011-02-25 15:55:09.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_pccard-2.6.17.c	2011-02-25 15:56:14.000000000 +0100
+@@ -54,6 +54,7 @@
+ 
+ //****************************************************************************
+ // helper function to get retrieved configuraton
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
+ static int pcan_pccard_conf_check(struct pcmcia_device *link, cistpl_cftable_entry_t *cfg,
+                                 cistpl_cftable_entry_t *dflt, unsigned int vcc, void *private)
+ {
+@@ -63,17 +64,45 @@
+   {
+     cistpl_io_t  *io  = (cfg->io.nwin > 0) ? &cfg->io  : &dflt->io;
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+     link->io.BasePort1     = io->win[0].base;
+     link->io.NumPorts1     = io->win[0].len;
+     link->io.Attributes1   = IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
+     link->io.IOAddrLines   = io->flags &  CISTPL_IO_LINES_MASK;
+ 
+     if (pcmcia_request_io(link, &link->io) == 0)
++#else
++    struct resource *pr = link->resource[0];
++
++    pr->start = io->win[0].base;
++    pr->end = io->win[0].len;
++    pr->name = dev_name(&link->dev);
++    pr->flags |= IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
++    link->io_lines = io->flags &  CISTPL_IO_LINES_MASK;
++
++    if (pcmcia_request_io(link) == 0)
++#endif
++
+       return 0;
+   }
+ 
+   return -ENODEV;
+ }
++#else
++static int pcan_pccard_conf_check(struct pcmcia_device *link, void *private)
++{
++   struct resource *pr = link->resource[0];
++
++   DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
++
++   pr->name = dev_name(&link->dev);
++   pr->flags &= ~IO_DATA_PATH_WIDTH;
++   pr->flags |= IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
++   link->io_lines = 10;
++
++   return pcmcia_request_io(link); 
++}
++#endif
+ 
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
+@@ -208,6 +237,10 @@
+ 
+   DPRINTK(KERN_DEBUG "%s: pccard_plugin(0x%p)\n", DEVICE_NAME, link);
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
++  link->config_flags |= CONF_AUTO_SET_IO;
++#endif
++
+   if ((last_ret = pcmcia_loop_config(link, pcan_pccard_conf_check, NULL)))
+   {
+     printk(KERN_WARNING "%s: pcmcia_loop_config() = %d!", DEVICE_NAME, last_ret);
+@@ -239,35 +272,45 @@
+   /* (this the job of pccard_create_all_devices() call below) */
+ #endif
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
+   link->conf.Attributes = CONF_ENABLE_IRQ;
+   link->conf.IntType    = INT_MEMORY_AND_IO;
+   link->conf.Present    = PRESENT_OPTION | PRESENT_STATUS;
+   if ((last_ret = pcmcia_request_configuration(link, &link->conf)))
+   {
+     printk(KERN_WARNING "%s: pcmcia_request_configuration() = %d!", DEVICE_NAME, last_ret);
++#else
++  link->config_flags |= CONF_ENABLE_IRQ;
++  link->config_regs = PRESENT_OPTION;
++  if ((last_ret = pcmcia_enable_device(link)))
++  {
++     printk(KERN_WARNING "%s: pcmcia_enable_device() = %d!", DEVICE_NAME, last_ret);
++#endif
+     goto fail;
+   }
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
+-  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq.AssignedIRQ);
+-
+   // init (cardmgr) devices associated with that card (is that necessary?)
+   card->node.major = pcan_drv.nMajor;
+   card->node.minor = PCCARD_MINOR_BASE;
+   strcpy(card->node.dev_name, DEVICE_NAME);
+   link->dev_node = &card->node;
++  card->commonIrq = link->irq.AssignedIRQ;
+ #else
+-  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq);
++  card->commonIrq = link->irq;
+ #endif
+ 
+-  // create device descriptors associated with the card - get relevant parts to get independent from dev_link_t
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+   card->basePort  = link->io.BasePort1;
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35)
+-  card->commonIrq = link->irq;
++  card->numPort = link->io.NumPorts1;
+ #else
+-  card->commonIrq = link->irq.AssignedIRQ;
++  card->basePort = link->resource[0]->start;
++  card->numPort = link->resource[0]->end;
+ #endif
+ 
++  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, card->basePort, card->numPort, card->commonIrq);
++
++  // create device descriptors associated with the card - get relevant parts to get independent from dev_link_t
+   last_ret = pccard_create_all_devices(card);
+   if (last_ret)
+     goto fail;
+Index: peak-linux-driver/driver/src/pcan_pccard.c
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_pccard.c	2011-02-25 15:55:28.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_pccard.c	2011-02-25 15:56:14.000000000 +0100
+@@ -43,8 +43,12 @@
+ #include <linux/string.h>
+ #include <linux/ioport.h>
+ 
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+ #include <pcmcia/cs_types.h>
++#endif
+ #include <pcmcia/cs.h>
++#endif
+ #include <pcmcia/cistpl.h>
+ #include <pcmcia/ds.h>
+ #include <pcmcia/cisreg.h>
+@@ -119,6 +123,11 @@
+   pcan_drv.pccarddrv.remove     = pccard_detach;
+   pcan_drv.pccarddrv.suspend    = pccard_suspend;
+   pcan_drv.pccarddrv.resume     = pccard_resume;
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
++  /* this version sets pccarddrv->drv.name with pccarddrv.name => */
++  /* it must be a valid pointer too */
++  pcan_drv.pccarddrv.name       = DEVICE_NAME;
++#endif
+   #endif
+ 
+   return pcmcia_register_driver(&pcan_drv.pccarddrv);
+Index: peak-linux-driver/driver/src/pcan_pccard_kernel.h
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_pccard_kernel.h	2011-02-25 15:55:36.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_pccard_kernel.h	2011-02-25 15:56:14.000000000 +0100
+@@ -44,8 +44,12 @@
+ #include <linux/timer.h>         // to support activity scan
+ 
+ #include <linux/types.h>
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+ #include <pcmcia/cs_types.h>
++#endif
+ #include <pcmcia/cs.h>
++#endif
+ #include <pcmcia/cistpl.h>
+ #include <pcmcia/ds.h>
+ 
+@@ -65,6 +69,7 @@
+   dev_link_t link;
+ #endif
+   u_int      basePort;                       // base of io area for all channels
++  u_int      numPort;
+   u_int      commonIrq;                      // irq for all channels
+   u_int      commonPort;                     // channels commonly used port
+   struct     pcandev *dev[PCCARD_CHANNELS];  // point to associated channels
+Index: peak-linux-driver/driver/src/pcan_usb_kernel.c
+===================================================================
+--- peak-linux-driver.orig/driver/src/pcan_usb_kernel.c	2011-02-25 15:55:47.000000000 +0100
++++ peak-linux-driver/driver/src/pcan_usb_kernel.c	2011-02-25 15:56:14.000000000 +0100
+@@ -223,7 +223,8 @@
+   int nResult = 0;
+   register purb_t pt;
+ 
+-  // DPRINTK(KERN_DEBUG "%s: pcan_set_parameter()\n", DEVICE_NAME);
++  DPRINTK(KERN_DEBUG "%s: %s(): ->EP#%02Xh\n", DEVICE_NAME, __FUNCTION__,
++dev->port.usb.Endpoint[1].ucNumber);
+ 
+   // don't do anything with non-existent hardware
+   if (!dev->ucPhysicallyInstalled)
+@@ -295,7 +296,8 @@
+   register purb_t pt;
+   USB_PORT *u = &dev->port.usb;
+ 
+-  DPRINTK(KERN_DEBUG "%s: pcan_hw_getcontrol_urb(%d, %d)\n", DEVICE_NAME, function, number);
++  DPRINTK(KERN_DEBUG "%s: %s(): <-EP#%02Xh\n", DEVICE_NAME, __FUNCTION__,
++dev->port.usb.Endpoint[0].ucNumber);
+ 
+   // don't do anything with non-existent hardware
+   if (!dev->ucPhysicallyInstalled)

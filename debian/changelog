@@ -1,3 +1,11 @@
+peak-linux-driver (6.24.3-1) unstable; urgency=low
+
+  * Integrated upstream patch.
+  * Removed patch comment_ioctl.
+  * Reenable PCCARD support.
+
+ -- Markus Becker <mab@comnets.uni-bremen.de>  Fri, 25 Feb 2011 15:52:49 +0100
+
 peak-linux-driver (6.24-1) unstable; urgency=low
 
   * New upstream version.
