@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
 Build-Depends: debhelper (>= 7.0.50~), bzip2
-Standards-Version: 3.8.4
+Standards-Version: 3.9.1
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
 Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
@@ -16,7 +16,7 @@ Description: PEAK-System CAN utils
 
 Package: peak-linux-driver-source
 Architecture: all
-Depends: module-assistant, debhelper (>= 7), make, bzip2
+Depends: module-assistant, debhelper (>= 7), make, bzip2, ${misc:Depends}
 Description: Source for the peak-linux-driver kernel modules
  This package provides the driver source code for CAN-bus interface 
  products from PEAK-System. These allow communication with the 
