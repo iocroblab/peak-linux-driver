@@ -1,8 +1,16 @@
+peak-linux-driver (6.24.3-2) unstable; urgency=low
+
+  * Fixed lintian errors.
+  * Added manpages.
+  * Added ${misc:Depends}.
+
+ -- Markus Becker <mab@comnets.uni-bremen.de>  Tue, 15 Mar 2011 21:14:57 +0100
+
 peak-linux-driver (6.24.3-1) unstable; urgency=low
 
   * Integrated upstream patch.
   * Removed patch comment_ioctl.
-  * Reenable PCCARD support.
+  * Re-enable PCCARD support.
 
  -- Markus Becker <mab@comnets.uni-bremen.de>  Fri, 25 Feb 2011 15:52:49 +0100
 
