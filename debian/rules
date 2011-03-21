@@ -158,8 +158,8 @@ install: build
 	dh_installdirs -p$(putils)  usr/bin
 	cp driver/pcan_make_devices debian/$(putils)/usr/bin/
 	@chmod 744 debian/$(putils)/usr/bin/pcan_make_devices
-	cp driver/wstress debian/$(putils)/usr/bin/
-	@chmod 744 debian/$(putils)/usr/bin/wstress
+	#cp driver/wstress debian/$(putils)/usr/bin/
+	#@chmod 744 debian/$(putils)/usr/bin/wstress
 
 	dh_installdirs -p$(putils)  lib/udev/rules.d
 	cp -f driver/udev/45-pcan.rules debian/$(putils)/lib/udev/rules.d
@@ -218,7 +218,7 @@ binary-arch: build install
 #	dh_installmime -s
 #	dh_installinit -s
 	dh_installcron -s
-#	dh_installman -s
+	dh_installman -s
 	dh_installinfo -s
 	dh_installchangelogs  -s
 	dh_strip -s
