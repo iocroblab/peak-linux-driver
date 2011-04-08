@@ -24,6 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Stephane Grosjean (s.grosjean@peak-system.com)    USB-PRO
 //                     
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Philipp Baer     (philipp.baer@informatik.uni-ulm.de)
@@ -75,7 +76,7 @@ static int rt_dev_register(void)
     }
 
     memcpy(rtdmdev, &pcandev_rt, sizeof(struct rtdm_device));
-    rtdmdev->device_id = dev->nMinor;
+    rtdmdev->device_id = MKDEV(dev->nMajor,dev->nMinor);
     snprintf(rtdmdev->device_name, RTDM_MAX_DEVNAME_LEN, "pcan%d", dev->nMinor);
     rtdmdev->proc_name = rtdmdev->device_name;
     result = rtdm_dev_register(rtdmdev);

@@ -78,7 +78,7 @@
 #include <src/pcan_dongle.h> // get support for PCAN-Dongle
 #endif
 #ifdef USB_SUPPORT
-#include <src/pcan_usb.h>   // get support for PCAN-USB
+#include <src/pcan_usb_core.h>   // get support for PCAN-USB
 #endif
 #ifdef PCCARD_SUPPORT
 #include <src/pcan_pccard.h>
@@ -317,7 +317,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
 
   len += sprintf(page + len, "\n");
   len += sprintf(page + len, "*------------ PEAK-Systems CAN interfaces (www.peak-system.com) -------------\n");
-  len += sprintf(page + len, "*--------------------------  %s  ----------------------------\n", pcan_drv.szVersionString);
+  len += sprintf(page + len, "*-------------------------- %s (%s) ----------------------\n", pcan_drv.szVersionString, CURRENT_VERSIONSTRING);
   len += sprintf(page + len, "%s\n", config);
   len += sprintf(page + len, "*--------------------- %d interfaces @ major %03d found -----------------------\n",
                      pcan_drv.wDeviceCount, pcan_drv.nMajor);
@@ -328,9 +328,9 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
   {
     u32 dwPort = 0;
     u16 wIrq   = 0;
-    #ifdef NETDEV_SUPPORT
+#ifdef NETDEV_SUPPORT
     struct net_device_stats *stats; /* rx/tx statistics can be found here */
-    #endif
+#endif
 
     dev = (struct pcandev *)ptr;
     switch (dev->wType)
@@ -349,48 +349,51 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
         wIrq   = dev->port.pci.wIrq;
         break;
       case HW_USB:
-        #ifdef USB_SUPPORT
+      case HW_USB_PRO:
+#ifdef USB_SUPPORT
         // get serial number of device
-        if (!dev->ucPhysicallyInstalled)
+        if (dev->ucPhysicallyInstalled)
         {
-          dev->port.usb.dwSerialNumber   = 0x00dead00;  // it is dead
-          dev->port.usb.ucHardcodedDevNr = 0;
+          dwPort = dev->port.usb.usb_if->dwSerialNumber;
+          wIrq   = dev->port.usb.ucHardcodedDevNr;
         }
-
-        dwPort = dev->port.usb.dwSerialNumber;
-        wIrq   = dev->port.usb.ucHardcodedDevNr;
-        #endif
+        else
+        {
+          dwPort = 0x00dead00;  // it is dead
+          wIrq = 0;
+        }
+#endif
         break;
       case HW_PCCARD:
-        #ifdef PCCARD_SUPPORT
+#ifdef PCCARD_SUPPORT
         dwPort = dev->port.pccard.dwPort;
         wIrq   = dev->port.pccard.wIrq;
-        #endif
+#endif
         break;
     }
 
-    #ifdef NETDEV_SUPPORT
+#ifdef NETDEV_SUPPORT
     stats = pcan_netdev_get_stats(dev->netdev);
-    #endif
+#endif
 
     len += sprintf(page + len, "%2d %6s %4s %08x %03d 0x%04x %08lx %08lx %08x %08x 0x%04x\n",
                    dev->nMinor,
                    dev->type,
-                   #ifdef NETDEV_SUPPORT
+#ifdef NETDEV_SUPPORT
                    dev->netdev->name,
-                   #else
+#else
                    "-NA-",
-                   #endif
+#endif
                    dwPort,
                    wIrq,
                    dev->wBTR0BTR1,
-                   #ifdef NETDEV_SUPPORT
+#ifdef NETDEV_SUPPORT
                    stats->rx_packets,
                    stats->tx_packets + dev->writeFifo.dwTotal,
-                   #else
+#else
                    (unsigned long)dev->readFifo.dwTotal,
                    (unsigned long)dev->writeFifo.dwTotal,
-                   #endif
+#endif
                    dev->dwInterruptCounter,
                    dev->dwErrorCounter,
                    dev->wCANStatus);

@@ -68,6 +68,7 @@
 #define HW_PCI            10 // PCI carries always SJA1000 chips
 #define HW_USB            11 // don't know if this is common over peak products
 #define HW_PCCARD         12 // not aligned to other OS
+#define HW_USB_PRO        13 
 
 //****************************************************************************
 // mask for standard and extended CAN identifiers

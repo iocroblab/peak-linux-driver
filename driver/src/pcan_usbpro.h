@@ -1,5 +1,3 @@
-#ifndef __PCAN_USB_H__
-#define __PCAN_USB_H__
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
@@ -30,25 +28,28 @@
 
 //****************************************************************************
 //
-// pcan_usb.h - the inner usb parts header for pcan-usb support
+// pcan_usbpro.h - the inner usb parts header for pcan-usb support
 //
-// $Id: pcan_usb.h 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_usbpro.h 615 2010-02-14 22:38:55Z khitschler $
 //
 //****************************************************************************
 
+#ifndef __PCAN_USBPRO_H__
+#define __PCAN_USBPRO_H__
 
-//****************************************************************************
-// DEFINES
-
-//****************************************************************************
-// INCLUDES
+/*****************************************************************************
+ * INCLUDES
+ */
 #include <linux/types.h>
 #include <linux/usb.h>
 
 #include <src/pcan_main.h>
 
-//****************************************************************************
-// DEFINES
+#ifdef HW_USB_PRO
+
+/*****************************************************************************
+ * DEFINES
+ */
 #ifdef LINUX_26
 #define __usb_submit_urb(x) usb_submit_urb(x, GFP_ATOMIC)
 #define __usb_alloc_urb(x)  usb_alloc_urb(x, GFP_ATOMIC)
@@ -58,17 +59,20 @@
 #define __usb_alloc_urb(x)  usb_alloc_urb(x)
 #endif
 
-//****************************************************************************
-// External API
+/*****************************************************************************
+ * External API
+ */
 #ifdef __cplusplus__
 extern "C" {
 #endif
 
-int pcan_usb_init(struct pcan_usb_interface *dev);
+int pcan_usbpro_init(struct pcan_usb_interface *);
 
 #ifdef __cplusplus__
 };
 #endif
 
-#endif // __PCAN_USB_H__
+#endif // HW_USB_PRO
+
+#endif // __PCAN_USBPRO_H__
 

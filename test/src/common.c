@@ -69,7 +69,7 @@ void print_message(TPCANMsg *m)
   int i;
   
   // print RTR, 11 or 29, CAN-Id and datalength
-  printf("receivetest: %c %c 0x%08x %1d  ", 
+  printf("receivetest: %c %c 0x%08x %1d ", 
       (m->MSGTYPE & MSGTYPE_RTR)      ? 'r' : 'm',
       (m->MSGTYPE & MSGTYPE_EXTENDED) ? 'e' : 's',
        m->ID, 
@@ -78,41 +78,52 @@ void print_message(TPCANMsg *m)
 	// don't print any telegram contents for remote frames
   if (!(m->MSGTYPE & MSGTYPE_RTR))
   	for (i = 0; i < m->LEN; i++)
-    	printf("0x%02x ", m->DATA[i]);
+    	printf("%02x ", m->DATA[i]);
     
   printf("\n");
+}
+
+void print_message_ex(TPCANRdMsg *mr)
+{
+  printf("%u.%u ", mr->dwTime, mr->wUsec);
+  print_message(&mr->Msg);
 }
 
 // lookup for HW_... constant out of device type string
 int getTypeOfInterface(char *szTypeName)
 {	  
-  int nType = 0;
+	int nType = 0;
     
-  if (!strcmp(szTypeName, "pci"))
-	  nType = HW_PCI;
+	if (!strcmp(szTypeName, "pci"))
+		nType = HW_PCI;
 	else
 	{
 		if (!strcmp(szTypeName, "isa"))
-	    nType = HW_ISA_SJA;
+			nType = HW_ISA_SJA;
 		else
 		{
-		  if (!strcmp(szTypeName, "sp"))
-	      nType = HW_DONGLE_SJA;
-		  else
-      {
-		    if (!strcmp(szTypeName, "epp"))
-	        nType = HW_DONGLE_SJA_EPP;
-        else
-        {
-          if (!strcmp(szTypeName, "usb"))
-  	        nType = HW_USB;
-          else
-          {
-            if (!strcmp(szTypeName, "pccard"))
-  	          nType = HW_PCCARD;
-          }
-        }
-      }
+			if (!strcmp(szTypeName, "sp"))
+				nType = HW_DONGLE_SJA;
+			else
+			{
+				if (!strcmp(szTypeName, "epp"))
+					nType = HW_DONGLE_SJA_EPP;
+				else
+				{
+					if (!strcmp(szTypeName, "usb"))
+						nType = HW_USB;
+					else
+					{
+						if (!strcmp(szTypeName, "usbpro"))
+							nType = HW_USB_PRO;
+						else
+						{
+							if (!strcmp(szTypeName, "pccard"))
+								nType = HW_PCCARD;
+						}
+					}
+				}
+			}
 		}
 	}
 	
@@ -129,6 +140,7 @@ char *getNameOfInterface(int nType)
     case HW_DONGLE_SJA:     return "sp";
     case HW_DONGLE_SJA_EPP: return "epp";
     case HW_USB:            return "usb";
+    case HW_USB_PRO:        return "usbpro";
     case HW_PCCARD:         return "pccard";
     
     default:                return "unknown";
@@ -147,7 +159,7 @@ void print_diag(const char *prgName)
   else      
   {
     printf("%s: type            = %s\n",              prgName, getNameOfInterface(diag.wType));
-    if (diag.wType == HW_USB)
+    if ((diag.wType == HW_USB) || (diag.wType == HW_USB_PRO))
     {
       printf("             Serial Number   = 0x%08x\n", diag.dwBase);
       printf("             Device Number   = %d\n",     diag.wIrqLevel);

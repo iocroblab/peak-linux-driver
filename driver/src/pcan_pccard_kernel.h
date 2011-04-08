@@ -33,7 +33,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.h 638 2011-01-12 13:15:30Z stephane $
+// $Id: pcan_pccard_kernel.h 628 2010-08-12 19:59:31Z khitschler $
 //
 //****************************************************************************
 
@@ -44,8 +44,12 @@
 #include <linux/timer.h>         // to support activity scan
 
 #include <linux/types.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 #include <pcmcia/cs_types.h>
+#endif
 #include <pcmcia/cs.h>
+#endif
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
 
@@ -65,6 +69,7 @@ typedef struct pcan_pccard
   dev_link_t link;
 #endif
   u_int      basePort;                       // base of io area for all channels
+  u_int      numPort;
   u_int      commonIrq;                      // irq for all channels
   u_int      commonPort;                     // channels commonly used port
   struct     pcandev *dev[PCCARD_CHANNELS];  // point to associated channels

@@ -24,6 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Stephane Grosjean (s.grosjean@peak-system.com)    USB-PRO
 //
 // Contributions: Philipp Baer (philipp.baer@informatik.uni-ulm.de)
 //                Armin Bauer (armin.bauer@desscon.com)
@@ -247,6 +248,7 @@ static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwP
   dev->free_irq    = pcan_pci_free_irq;
   dev->open        = pcan_pci_open;
   dev->release     = pcan_pci_release;
+  dev->nMajor      = pcan_drv.nMajor;
   dev->nMinor      = PCAN_PCI_MINOR_BASE + _pci_devices;
   dev->filter      = pcan_create_filter_chain();
 

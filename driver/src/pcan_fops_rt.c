@@ -24,6 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Stephane Grosjean (s.grosjean@peak-system.com)    USB-PRO
 //
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Arno (a.vdlaan@hccnet.nl)
@@ -111,7 +112,8 @@ int pcan_open_rt(struct rtdm_dev_context *context, rtdm_user_info_t *user_info, 
   struct pcandev *dev;
   int err = 0;
   struct pcanctx_rt *ctx;
-  int _minor = context->device->device_id;
+  int _major = MAJOR(context->device->device_id);
+  int _minor = MINOR(context->device->device_id);
 
   DPRINTK(KERN_DEBUG "%s: pcan_open_rt(), minor = %d.\n", DEVICE_NAME, _minor);
 
@@ -125,8 +127,8 @@ int pcan_open_rt(struct rtdm_dev_context *context, rtdm_user_info_t *user_info, 
   rtdm_lock_init(&ctx->out_lock);
   rtdm_lock_init(&ctx->sja_lock);
 
-
-  dev = pcan_search_dev(_minor);
+  /* TBD: get the device major number from xenomai structure... */
+  dev = pcan_search_dev(_major, _minor);
   if (!dev)
     return -ENODEV;
 

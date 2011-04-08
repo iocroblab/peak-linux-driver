@@ -1,2 +1,16 @@
-2011-01-12 - v6.24 - content:
-- Handle PCMCIA cards in v2.6.35 kernel
+2011-01-12 - 6.24 - content:
+- handle PCMCIA cards in 2.6.35 kernel
+
+2011-01-18 - 6.24.1 - content:
+- support 2.6.36 kernel
+
+2011-01-18 - 6.24.2 - content:
+- support 2.6.37 kernel
+
+2011-03-11 - 7.0 - content:
+- support PCAN-USB-PRO 
+- fix 2.6.37 with PCMCIA
+- handle timestamps from PCAN-USB too
+
+2011-03-17 - 7.1 - content:
+- support of dynamic usb minors allocation (kernel config option)

@@ -117,24 +117,25 @@ int open_can(bool bDevNodeGiven,bool bTypeGiven,const char *szDevNode,int nType,
 }
 
 // read from CAN forever - until manual break
-int read_loop()
+int read_loop(bool display_on)
 {
   // read in endless loop until Ctrl-C
   while (1) 
   {
-    TPCANMsg m;
+    TPCANRdMsg m;
     __u32 status;
     
-    if ((errno = CAN_Read(h, &m))) 
+    if ((errno = LINUX_CAN_Read(h, &m))) 
     {
-      perror("receivetest: CAN_Read()");
+      perror("receivetest: LINUX_CAN_Read()");
       return errno;
     }
     else 
     {
-      print_message(&m);
+      if (display_on)
+         print_message_ex(&m);
       // check if a CAN status is pending
-      if (m.MSGTYPE & MSGTYPE_STATUS) 
+      if (m.Msg.MSGTYPE & MSGTYPE_STATUS) 
       {
         status = CAN_Status(h);
         if ((int)status < 0) 
@@ -179,6 +180,7 @@ int main(int argc, char *argv[])
   const char  *szDevNode = DEFAULT_NODE;
   bool bDevNodeGiven = false;
   bool bTypeGiven    = false;
+  bool bDisplayOn    = true;
   char txt[VERSIONSTRING_LEN];
 
   errno = 0;
@@ -209,6 +211,10 @@ int main(int argc, char *argv[])
       case 'f':
         szDevNode = ptr;
         bDevNodeGiven = true;
+        break;
+      case 'd':
+        if (strcmp(ptr, "no") == 0)
+          bDisplayOn = false;
         break;
       case 't':
         nType = getTypeOfInterface(ptr);
@@ -341,7 +347,7 @@ int main(int argc, char *argv[])
       goto error;
     }
   }
-  errno = read_loop();
+  errno = read_loop(bDisplayOn);
   if (!errno)
     return 0;
 

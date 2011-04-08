@@ -132,23 +132,28 @@ static int resolve(char *buffer, int *nType, unsigned long *dwPort, unsigned sho
     {
       if (!strcmp(t, "epp"))
         *nType = HW_DONGLE_SJA_EPP;
-	    else
-	    {
+	   else
+	   {
         if (!strcmp(t, "isa"))
           *nType = HW_ISA_SJA;
-	      else
-	      {
+	     else
+	     {
           if (!strcmp(t, "sp"))
             *nType = HW_DONGLE_SJA;
-	        else
+	       else
           {
             if (!strcmp(t, "usb"))
               *nType = HW_USB;
             else
-              *nType = -1;
+            {
+              if (!strcmp(t, "usbpro"))
+                *nType = HW_USB_PRO;
+              else
+                *nType = -1;
+            }
           }
-	      }
-	    }
+	     }
+	   }
     }
 
     // jump over ndev
@@ -251,6 +256,7 @@ HANDLE CAN_Open(WORD wHardwareType, ...)
       break;
 
     case HW_USB:
+    case HW_USB_PRO:
       m_dwPort = va_arg(args, unsigned long);
       m_wIrq   = (unsigned short)va_arg(args, unsigned long);
       va_end(args);
@@ -298,6 +304,7 @@ HANDLE CAN_Open(WORD wHardwareType, ...)
                 break;
 	            }
             case HW_USB:
+            case HW_USB_PRO:
               if (((m_dwPort + 31) == nMinor) || // enumerate 1..8 (not 32 .. 39)
 	                 (m_dwPort == 0))              // use 1st port as default
 	            {

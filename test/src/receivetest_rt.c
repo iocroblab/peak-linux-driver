@@ -315,7 +315,7 @@ int main(int argc, char *argv[])
   }
   else{
     printf("receivetest: type=%s", getNameOfInterface(nType));
-    if (nType == HW_USB){
+    if ((nType == HW_USB) || (nType == HW_USB_PRO)){
       if (dwPort)
         printf(", %d. device\n", dwPort);
       else

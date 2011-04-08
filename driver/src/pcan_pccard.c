@@ -31,7 +31,7 @@
 //
 // system dependend parts to handle pcan-pccard
 //
-// $Id: pcan_pccard.c 638 2011-01-12 13:15:30Z stephane $
+// $Id: pcan_pccard.c 550M 2010-10-19 11:13:30Z (lokal) $
 //
 //****************************************************************************
 
@@ -43,8 +43,12 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 #include <pcmcia/cs_types.h>
+#endif
 #include <pcmcia/cs.h>
+#endif
 #include <pcmcia/cistpl.h>
 #include <pcmcia/ds.h>
 #include <pcmcia/cisreg.h>
@@ -91,38 +95,43 @@ static int pccard_init(void)
 {
   DPRINTK(KERN_DEBUG "%s: pccard_init()\n", DEVICE_NAME);
 
-  #ifdef LINUX_24
+#ifdef LINUX_24
   register_pccard_driver(&pccard_info, &pccard_attach, &pccard_detach);
   return 0;
-  #else
+#else
 
   memset (&pcan_drv.pccarddrv, 0, sizeof(pcan_drv.pccarddrv));
 
   pcan_drv.pccarddrv.owner      = THIS_MODULE;
   pcan_drv.pccarddrv.drv.name   = DEVICE_NAME;
 
-  #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
   pcan_drv.pccarddrv.attach     = pccard_attach;
   pcan_drv.pccarddrv.detach     = pccard_detach;
-  #endif
+#endif
 
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
   pcan_drv.pccarddrv.id_table   = pccard_id_table;
   pcan_drv.pccarddrv.event      = pccard_event;
   pcan_drv.pccarddrv.attach     = pccard_attach;
   pcan_drv.pccarddrv.detach     = pccard_detach;
   #endif
 
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,16)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,16)
   pcan_drv.pccarddrv.id_table   = pccard_id_table;
   pcan_drv.pccarddrv.probe      = pccard_probe;
   pcan_drv.pccarddrv.remove     = pccard_detach;
   pcan_drv.pccarddrv.suspend    = pccard_suspend;
   pcan_drv.pccarddrv.resume     = pccard_resume;
-  #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+  /* this version sets pccarddrv->drv.name with pccarddrv.name => */
+  /* it must be a valid pointer too */
+  pcan_drv.pccarddrv.name       = DEVICE_NAME;
+#endif
+#endif
 
   return pcmcia_register_driver(&pcan_drv.pccarddrv);
-  #endif
+#endif
 }
 
 //****************************************************************************

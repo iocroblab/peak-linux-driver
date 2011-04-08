@@ -27,6 +27,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Stephane Grosjean (s.grosjean@peak-system.com)    USB-PRO
 //                     
 //****************************************************************************
 
@@ -56,7 +57,7 @@ void pcan_release_path(struct pcandev *dev, struct pcanctx_rt *ctx);
 int pcan_open_path(struct pcandev *dev);
 void pcan_release_path(struct pcandev *dev);
 #endif
-struct pcandev* pcan_search_dev(int minor);
+struct pcandev* pcan_search_dev(int major, int minor);
 
 TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev);
 TPSTATUS pcan_ioctl_status_common(struct pcandev *dev);
