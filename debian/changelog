@@ -1,3 +1,10 @@
+peak-linux-driver (7.1-1) unstable; urgency=low
+
+  * Updated to upstream version 7.1.
+  * Switch to 3.0 (git) format.
+
+ -- Markus Becker <mab@comnets.uni-bremen.de>  Fri, 08 Apr 2011 17:42:09 +0200
+
 peak-linux-driver (6.24.3-2) unstable; urgency=low
 
   * Fixed lintian errors.
