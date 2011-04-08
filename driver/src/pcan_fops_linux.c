@@ -67,10 +67,12 @@ static int pcan_open(struct inode *inode, struct file *filep)
   int err = 0;
   struct fileobj *fobj = (struct fileobj *)NULL;
   int _minor = minor(inode->i_rdev);
+  int _major = MAJOR(inode->i_rdev);
 
-  DPRINTK(KERN_DEBUG "%s: pcan_open(), minor = %d.\n", DEVICE_NAME, _minor);
+  DPRINTK(KERN_DEBUG "%s: pcan_open(), major/minor = %d/%d.\n", 
+                     DEVICE_NAME, _major, _minor);
 
-  dev = pcan_search_dev(_minor);
+  dev = pcan_search_dev(_major, _minor);
   if (!dev)
     return -ENODEV;
 
@@ -422,7 +424,11 @@ static int pcan_ioctl_extra_parameters(struct pcandev *dev, TPEXTRAPARAMS *param
 
 //----------------------------------------------------------------------------
 // is called at user ioctl() call
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 int pcan_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, unsigned long arg)
+#else
+long pcan_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
+#endif
 {
   int err;
   struct fileobj *fobj = (struct fileobj *)filep->private_data;
@@ -741,7 +747,11 @@ struct file_operations pcan_fops =
   release:    pcan_release,
   read:       pcan_read,
   write:      pcan_write,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
   ioctl:      pcan_ioctl,
+#else
+  unlocked_ioctl: pcan_ioctl,
+#endif
   poll:       pcan_poll,
 };
 

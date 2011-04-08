@@ -280,14 +280,22 @@ void pcan_netdev_init(struct net_device *dev)
 void pcan_netdev_create_name(char *name, struct pcandev *pdev)
 {
   extern char *assign; /* module param: assignment for netdevice names */
+  int minor = pdev->nMinor;
 
   if (!assign) /* auto assignment */
     return;
 
+#ifdef USB_SUPPORT
+#ifdef CONFIG_USB_DYNAMIC_MINORS
+  if (pdev->nMajor == USB_MAJOR)
+    minor += PCAN_USB_MINOR_BASE;
+#endif
+#endif
+
   if (!strncmp(assign, "peak", 4)) {
 
     // assign=peak
-    snprintf(name, IFNAMSIZ-1, "can%d", pdev->nMinor); /* easy: /dev/pcanXX -> canXX */
+    snprintf(name, IFNAMSIZ-1, "can%d", minor); /* easy: /dev/pcanXX -> canXX */
 
   } else {
 
@@ -306,7 +314,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
         return; /* bad parameter format => quit */
       }
 
-      if (peaknum == pdev->nMinor) {
+      if (peaknum == minor) {
         snprintf(name, IFNAMSIZ-1, "can%d", netnum);
         break; /* done */
       }
@@ -399,8 +407,8 @@ int pcan_netdev_register(struct pcandev *pdev)
   priv->pdev   = pdev;
   pdev->netdev = ndev;
 
-  printk(KERN_INFO "%s: registered netdevice %s for pcan %s hw (minor %d)\n",
-         DEVICE_NAME, ndev->name, pdev->type, pdev->nMinor);
+  printk(KERN_INFO "%s: registered netdevice %s for pcan %s hw (major,minor %d,%d)\n",
+         DEVICE_NAME, ndev->name, pdev->type, pdev->nMajor, pdev->nMinor);
 
   return 0;
 }

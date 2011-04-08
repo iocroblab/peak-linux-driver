@@ -213,14 +213,15 @@ int pcan_open_path(PCAN_OPEN_PATH_ARGS)
 }
 
 //----------------------------------------------------------------------------
-// find the pcandev to a given minor number
+// find the pcandev according to given major,minor numbers
 // returns NULL pointer in the case of no success
-struct pcandev* pcan_search_dev(int minor)
+struct pcandev* pcan_search_dev(int major, int minor)
 {
   struct pcandev *dev = (struct pcandev *)NULL;
   struct list_head *ptr;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_search_dev(), minor = %d.\n", DEVICE_NAME, minor);
+  DPRINTK(KERN_DEBUG "%s: pcan_search_dev(), major,minor = %d,%d.\n", 
+          DEVICE_NAME, major, minor);
 
   if (list_empty(&pcan_drv.devices))
   {
@@ -233,18 +234,20 @@ struct pcandev* pcan_search_dev(int minor)
   {
     dev = (struct pcandev *)ptr;
 
-    if (dev->nMinor == minor)
-      break;
+    if (dev->nMajor == major)
+      if (dev->nMinor == minor)
+        break;
   }
 
-  if (dev->nMinor != minor)
+  if (ptr == &pcan_drv.devices)
   {
-    DPRINTK(KERN_DEBUG "%s: didn't find my minor!\n", DEVICE_NAME);
+    printk(KERN_DEBUG "%s: didn't find any pcan devices (%d,%d)\n", 
+           DEVICE_NAME, major, minor);
     return NULL;
   }
 
   return dev;
-  }
+}
 
 //----------------------------------------------------------------------------
 // is called by pcan_release() and pcan_netdev_close()
@@ -337,16 +340,17 @@ TPDIAG pcan_ioctl_diag_common(struct pcandev *dev)
       local.wIrqLevel   = dev->port.pci.wIrq;
       break;
     case HW_USB:
-      #ifdef USB_SUPPORT
-      local.dwBase    = dev->port.usb.dwSerialNumber;
+    case HW_USB_PRO:
+#ifdef USB_SUPPORT
+      local.dwBase    = dev->port.usb.usb_if->dwSerialNumber;
       local.wIrqLevel = dev->port.usb.ucHardcodedDevNr;
-      #endif
+#endif
       break;
     case HW_PCCARD:
-      #ifdef PCCARD_SUPPORT
+#ifdef PCCARD_SUPPORT
       local.dwBase      = dev->port.pccard.dwPort;
       local.wIrqLevel   = dev->port.pccard.wIrq;
-      #endif
+#endif
       break;
   }
   local.dwReadCounter   = dev->readFifo.dwTotal;

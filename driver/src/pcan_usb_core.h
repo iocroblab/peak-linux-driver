@@ -1,10 +1,10 @@
-#ifndef __PCAN_USB_KERNEL_H__
-#define __PCAN_USB_KERNEL_H__
+#ifndef __PCAN_USB_CORE_H__
+#define __PCAN_USB_CORE_H__
 //****************************************************************************
 // Copyright (C) 2001-2007  PEAK System-Technik GmbH
 //
 // linux@peak-system.com
-// www.peak-system.com 
+// www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -29,47 +29,34 @@
 
 //****************************************************************************
 //
-// pcan_usb-kernel.h - the inner usb parts header for pcan-usb support
+// pcan_usb_core.h - the outer usb parts header for pcan-usb and pcanèb-pro 
+//                   support
 //
-// $Id: pcan_usb_kernel.h 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_usb_core.h 447 2007-01-28 14:05:50Z khitschler $
 //
 //****************************************************************************
-
-
-//****************************************************************************
-// DEFINES
 
 //****************************************************************************
 // INCLUDES
-#include <linux/types.h>
-#include <linux/usb.h>
-
 #include <src/pcan_main.h>
-
-#ifdef LINUX_26
-  #define __usb_submit_urb(x) usb_submit_urb(x, GFP_ATOMIC)
-  #define __usb_alloc_urb(x)  usb_alloc_urb(x, GFP_ATOMIC)
-  #define FILL_BULK_URB(a, b, c, d, e, f, g) usb_fill_bulk_urb(a, b, c, d, e, (usb_complete_t)f, (void *)g)
-#else
-  #define __usb_submit_urb(x) usb_submit_urb(x)
-  #define __usb_alloc_urb(x)  usb_alloc_urb(x)
-#endif
 
 //****************************************************************************
 // DEFINES
-int pcan_hw_setCANOn(struct pcandev *dev);
-int pcan_hw_setCANOff(struct pcandev *dev);
 
-int pcan_hw_Init(struct pcandev *dev, u16 btr0btr1, u8 bListenOnly);
+/* External API */
+#ifdef __cplusplus__
+extern "C" {
+#endif
 
-int pcan_hw_getSNR(struct pcandev *dev, u32 *pdwSNR);
-int pcan_hw_setSNR(struct pcandev *dev, u32 dwSNR);
+int  pcan_usb_register_devices(void);
 
-int pcan_hw_getDeviceNr(struct pcandev *dev, u8 *pucDeviceNr);
-int pcan_hw_setDeviceNr(struct pcandev *dev, u8 ucDeviceNr);
+void pcan_usb_deinit(void);
 
-int pcan_hw_DecodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int lCurrentLength);
-int pcan_hw_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnDataLength);
+int  pcan_usb_getSerialNumber(struct pcandev *dev);
 
-#endif // __PCAN_USB_KERNEL_H__
+#ifdef __cplusplus__
+};
+#endif
+
+#endif // __PCAN_USB_CORE_H__
 

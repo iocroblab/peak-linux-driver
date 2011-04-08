@@ -181,7 +181,7 @@ int pcan_do_filter(void *handle, u32 can_id)
   // DPRINTK(KERN_DEBUG "%s: pcan_filter(0x%p, 0x%08x)\n", DEVICE_NAME, handle, can_id);
 
   // pass always when no filter reset has been done before
-  if ((!chain) || (chain->count < 0))
+  if ((!chain) || (chain->count <= 0))
     return 0;
 
   // status is always passed 

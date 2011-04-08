@@ -31,7 +31,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 638 2011-01-12 13:15:30Z stephane $
+// $Id: pcan_pccard_kernel.c 628 2010-08-12 19:59:31Z khitschler $
 //
 //****************************************************************************
 
@@ -557,6 +557,7 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
   dev->free_irq    = pccard_free_irq;
   dev->open        = pccard_open;
   dev->release     = pccard_release;
+  dev->nMajor      = pcan_drv.nMajor;
   dev->nMinor      = PCCARD_MINOR_BASE + pccard_devices;
   dev->filter      = pcan_create_filter_chain();
 

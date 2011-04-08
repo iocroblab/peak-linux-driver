@@ -94,15 +94,20 @@ void init()
 }
 
 // loop writing to CAN-Bus
-int write_loop(__u32 dwMaxTimeInterval)
+int write_loop(__u32 dwMaxTimeInterval, __u32 dwMaxLoop)
 {
+  __u32 l;
   // write out endless loop until Ctrl-C
   double scale = (dwMaxTimeInterval * 1000.0) / (RAND_MAX + 1.0);
 
-  while (1)
+  //while (1)
+  for (l=0; ; l++)
   {
     std::list<TPCANMsg>::iterator iter;
     int i;
+
+    if (dwMaxLoop)
+		if (l >= dwMaxLoop) break;
 
     for (iter = List->begin(); iter != List->end(); iter++)
     {
@@ -150,7 +155,7 @@ int main(int argc, char *argv[])
   __u32 dwPort = 0;
   __u16 wIrq = 0;
   __u16 wBTR0BTR1 = 0;
-  __u32 dwMaxTimeInterval = 0;
+  __u32 dwMaxTimeInterval = 0, dwMaxLoop = 0;
   char *filename = NULL;
   const char *szDevNode = DEFAULT_NODE;
   bool bDevNodeGiven = false;
@@ -218,6 +223,9 @@ int main(int argc, char *argv[])
           break;
         case 'r':
           dwMaxTimeInterval = strtoul(ptr, NULL, 10);
+          break;
+        case 'n':
+          dwMaxLoop = strtoul(ptr, NULL, 10);
           break;
         default:
           errno = EINVAL;
@@ -346,7 +354,7 @@ int main(int argc, char *argv[])
     }
   }
   // enter in the write loop
-  errno = write_loop(dwMaxTimeInterval);
+  errno = write_loop(dwMaxTimeInterval, dwMaxLoop);
   if (!errno)
     return 0;
 

@@ -32,7 +32,7 @@
 // system dependend parts to handle pcan-pccard
 // special code for kernels greater and equal than 2.6.17
 //
-// $Id: pcan_pccard-2.6.17.c 638 2011-01-12 13:15:30Z stephane $
+// $Id: pcan_pccard-2.6.17.c 628 2010-08-12 19:59:31Z khitschler $
 //
 //****************************************************************************
 
@@ -54,6 +54,7 @@ static void pccard_plugout(struct pcmcia_device *link)
 
 //****************************************************************************
 // helper function to get retrieved configuraton
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static int pcan_pccard_conf_check(struct pcmcia_device *link, cistpl_cftable_entry_t *cfg,
                                 cistpl_cftable_entry_t *dflt, unsigned int vcc, void *private)
 {
@@ -63,18 +64,45 @@ static int pcan_pccard_conf_check(struct pcmcia_device *link, cistpl_cftable_ent
   {
     cistpl_io_t  *io  = (cfg->io.nwin > 0) ? &cfg->io  : &dflt->io;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
     link->io.BasePort1     = io->win[0].base;
     link->io.NumPorts1     = io->win[0].len;
     link->io.Attributes1   = IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
     link->io.IOAddrLines   = io->flags &  CISTPL_IO_LINES_MASK;
 
     if (pcmcia_request_io(link, &link->io) == 0)
+#else
+    struct resource *pr = link->resource[0];
+
+    pr->start = io->win[0].base;
+    pr->end = io->win[0].len;
+    pr->name = dev_name(&link->dev);
+    pr->flags |= IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
+    link->io_lines = io->flags &  CISTPL_IO_LINES_MASK;
+
+    if (pcmcia_request_io(link) == 0)
+#endif
+
       return 0;
   }
 
   return -ENODEV;
 }
+#else
+static int pcan_pccard_conf_check(struct pcmcia_device *link, void *private)
+{
+	struct resource *pr = link->resource[0];
 
+	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
+
+	pr->name = dev_name(&link->dev);
+	pr->flags &= ~IO_DATA_PATH_WIDTH;
+	pr->flags |= IO_DATA_PATH_WIDTH_8; // only this kind of access is yet supported
+	link->io_lines = 10;
+
+	return pcmcia_request_io(link);
+}
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28)
 //****************************************************************************
@@ -208,6 +236,10 @@ static int pccard_plugin(struct pcmcia_device *link)
 
   DPRINTK(KERN_DEBUG "%s: pccard_plugin(0x%p)\n", DEVICE_NAME, link);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+	link->config_flags |= CONF_AUTO_SET_IO;
+#endif
+
   if ((last_ret = pcmcia_loop_config(link, pcan_pccard_conf_check, NULL)))
   {
     printk(KERN_WARNING "%s: pcmcia_loop_config() = %d!", DEVICE_NAME, last_ret);
@@ -239,35 +271,45 @@ static int pccard_plugin(struct pcmcia_device *link)
   /* (this the job of pccard_create_all_devices() call below) */
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
   link->conf.Attributes = CONF_ENABLE_IRQ;
   link->conf.IntType    = INT_MEMORY_AND_IO;
   link->conf.Present    = PRESENT_OPTION | PRESENT_STATUS;
   if ((last_ret = pcmcia_request_configuration(link, &link->conf)))
   {
     printk(KERN_WARNING "%s: pcmcia_request_configuration() = %d!", DEVICE_NAME, last_ret);
+#else
+  link->config_flags |= CONF_ENABLE_IRQ;
+  link->config_regs = PRESENT_OPTION;
+  if ((last_ret = pcmcia_enable_device(link)))
+  {
+     printk(KERN_WARNING "%s: pcmcia_enable_device() = %d!", DEVICE_NAME, last_ret);
+#endif
     goto fail;
   }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
-  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq.AssignedIRQ);
-
   // init (cardmgr) devices associated with that card (is that necessary?)
   card->node.major = pcan_drv.nMajor;
   card->node.minor = PCCARD_MINOR_BASE;
   strcpy(card->node.dev_name, DEVICE_NAME);
   link->dev_node = &card->node;
+  card->commonIrq = link->irq.AssignedIRQ;
 #else
-  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, link->io.BasePort1, link->io.NumPorts1, link->irq);
+  card->commonIrq = link->irq;
 #endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+  card->basePort  = link->io.BasePort1;
+  card->numPort = link->io.NumPorts1;
+#else
+  card->basePort = link->resource[0]->start;
+  card->numPort = link->resource[0]->end;
+#endif
+
+  DPRINTK(KERN_DEBUG "%s: pccard found: base1=0x%04x, size=%d, irq=%d\n", DEVICE_NAME, card->basePort, card->numPort, card->commonIrq);
 
   // create device descriptors associated with the card - get relevant parts to get independent from dev_link_t
-  card->basePort  = link->io.BasePort1;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,35)
-  card->commonIrq = link->irq;
-#else
-  card->commonIrq = link->irq.AssignedIRQ;
-#endif
-
   last_ret = pccard_create_all_devices(card);
   if (last_ret)
     goto fail;

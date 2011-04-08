@@ -24,6 +24,7 @@
 //                Edouard Tisserant (edouard.tisserant@lolitech.fr) XENOMAI
 //                Laurent Bessard   (laurent.bessard@lolitech.fr)   XENOMAI
 //                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Stephane Grosjean (s.grosjean@peak-system.com)    USB-PRO
 //                     
 // Contributions: Marcel Offermans (marcel.offermans@luminis.nl)
 //                Philipp Baer (philipp.baer@informatik.uni-ulm.de)
@@ -384,6 +385,7 @@ static int  pcan_dongle_init(struct pcandev *dev, u32 dwPort, u16 wIrq, char *ty
   else
     dev->port.dng.wIrq   = wIrq;    
   
+  dev->nMinor = pcan_drv.nMajor;
   if (dev->wType == HW_DONGLE_SJA)
   {
     dev->nMinor        = PCAN_DNG_SP_MINOR_BASE + sp_devices; 

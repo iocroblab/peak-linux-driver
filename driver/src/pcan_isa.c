@@ -152,6 +152,7 @@ static int  pcan_isa_init(struct pcandev *dev, u32 dwPort, u16 wIrq)
     dev->port.isa.wIrq   = wIrq;    
   } 
    
+  dev->nMajor      = pcan_drv.nMajor;
   dev->nMinor      = PCAN_ISA_MINOR_BASE + isa_devices;
    
   // request address range reservation
