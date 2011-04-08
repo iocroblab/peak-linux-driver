@@ -6,6 +6,8 @@ Description: Upstream changes introduced in version 6.24.3-1
  peak-linux-driver (6.24.3-1) unstable; urgency=low
  .
    * Integrated upstream patch.
+   * Removed patch comment_ioctl.
+   * Re-enable PCCARD support.
  .
  The person named in the Author field signed this changelog entry.
 Author: Markus Becker <mab@comnets.uni-bremen.de>
