@@ -43,6 +43,8 @@
 
 #define SJA1000_METHOD_ARGS struct pcandev *dev, struct pcanctx_rt *ctx
 
+#define SJA1000_LOCK_DECLARE
+#define SJA1000_LOCK_INIT(type)
 #define SJA1000_LOCK_IRQSAVE(type) {rtdm_lockctx_t lockctx;\
                                  rtdm_lock_get_irqsave(&ctx->type, lockctx)
 #define SJA1000_UNLOCK_IRQRESTORE(type) rtdm_lock_put_irqrestore(&ctx->type, lockctx);}

@@ -37,8 +37,10 @@
 
 //****************************************************************************
 // DEFINES
-#define SJA1000_IRQ_HANDLED 1
-#define SJA1000_IRQ_NONE 0
+//#define SJA1000_IRQ_HANDLED 1
+#define SJA1000_IRQ_HANDLED            IRQ_HANDLED 
+//#define SJA1000_IRQ_NONE 0
+#define SJA1000_IRQ_NONE               IRQ_NONE
 
 #define SJA1000_METHOD_ARGS struct pcandev *dev
 

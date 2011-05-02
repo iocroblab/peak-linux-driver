@@ -35,6 +35,7 @@
 // $Id: pcan_fifo.c 600 2009-11-17 20:44:05Z khitschler $
 //
 //****************************************************************************
+#define PCAN_FIFO_FIX_NOT_FULL_TEST
 
 //****************************************************************************
 // INCLUDES
@@ -162,7 +163,18 @@ int pcan_fifo_status(FIFO_MANAGER *anchor)
 // returns 0 if the fifo is full
 int pcan_fifo_not_full(FIFO_MANAGER *anchor)
 {
+#ifdef PCAN_FIFO_FIX_NOT_FULL_TEST
+  int r;
+  DECLARE_SPIN_LOCK_IRQSAVE_FLAGS;
+
+  SPIN_LOCK_IRQSAVE(&anchor->lock);
+  r = (anchor->nStored < anchor->nCount);
+  SPIN_UNLOCK_IRQRESTORE(&anchor->lock);
+
+  return r;
+#else
   return (anchor->nStored < (anchor->nCount - 1));
+#endif
 }
 
 //----------------------------------------------------------------------------
