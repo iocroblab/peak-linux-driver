@@ -258,7 +258,7 @@ pcan-objs += $(SRC)/pcan_pccard_kernel.o $(SRC)/pcan_pccard.o
 endif
 
 ifeq ($(USB),USB_SUPPORT)
-pcan-objs += $(SRC)/pcan_usb_kernel.o $(SRC)/pcan_usb.o 
+pcan-objs += $(SRC)/pcan_usb_core.o $(SRC)/pcan_usb.o 
 endif
 
 ifeq ($(NET),NETDEV_SUPPORT)
