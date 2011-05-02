@@ -127,7 +127,9 @@ static int dev_register(void)
 			switch (pdev->wType)
 			{
 			case HW_USB:
+#ifdef HW_USB_PRO
 			case HW_USB_PRO:
+#endif
 			case HW_PCCARD:
 				break;
 			default:
@@ -154,7 +156,9 @@ static int dev_register(void)
 			  case HW_DONGLE_SJA_EPP: pcan_device_node_create(dev);
 			    break;
 			  case HW_USB:
+#ifdef HW_USB_PRO
 			  case HW_USB_PRO:
+#endif
 			  case HW_PCCARD:
 			  default:
 			    // do nothing, it's handled at hotplug
@@ -190,7 +194,9 @@ void dev_unregister(void)
 				pcan_device_node_destroy(dev);
 				break;
 			case HW_USB:
+#ifdef HW_USB_PRO
 			case HW_USB_PRO:
+#endif
 			case HW_PCCARD:
 			default:
 				// do nothing, it's handled at hot(un)plug
@@ -212,7 +218,9 @@ void dev_unregister(void)
 			switch(pdev->wType)
 			{
 			case HW_USB:
+#ifdef HW_USB_PRO
 			case HW_USB_PRO:
+#endif
 				break;
 			default:
 				pcan_netdev_unregister(pdev);

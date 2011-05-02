@@ -146,10 +146,12 @@ static int resolve(char *buffer, int *nType, unsigned long *dwPort, unsigned sho
               *nType = HW_USB;
             else
             {
+#ifdef HW_USB_PRO
               if (!strcmp(t, "usbpro"))
                 *nType = HW_USB_PRO;
               else
                 *nType = -1;
+#endif
             }
           }
 	     }
@@ -256,7 +258,9 @@ HANDLE CAN_Open(WORD wHardwareType, ...)
       break;
 
     case HW_USB:
+#ifdef HW_USB_PRO
     case HW_USB_PRO:
+#endif
       m_dwPort = va_arg(args, unsigned long);
       m_wIrq   = (unsigned short)va_arg(args, unsigned long);
       va_end(args);
@@ -304,7 +308,9 @@ HANDLE CAN_Open(WORD wHardwareType, ...)
                 break;
 	            }
             case HW_USB:
+#ifdef HW_USB_PRO
             case HW_USB_PRO:
+#endif
               if (((m_dwPort + 31) == nMinor) || // enumerate 1..8 (not 32 .. 39)
 	                 (m_dwPort == 0))              // use 1st port as default
 	            {

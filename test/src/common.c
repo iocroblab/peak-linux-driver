@@ -114,9 +114,11 @@ int getTypeOfInterface(char *szTypeName)
 						nType = HW_USB;
 					else
 					{
+#ifdef HW_USB_PRO
 						if (!strcmp(szTypeName, "usbpro"))
 							nType = HW_USB_PRO;
 						else
+#endif
 						{
 							if (!strcmp(szTypeName, "pccard"))
 								nType = HW_PCCARD;
@@ -140,7 +142,9 @@ char *getNameOfInterface(int nType)
     case HW_DONGLE_SJA:     return "sp";
     case HW_DONGLE_SJA_EPP: return "epp";
     case HW_USB:            return "usb";
+#ifdef HW_USB_PRO
     case HW_USB_PRO:        return "usbpro";
+#endif
     case HW_PCCARD:         return "pccard";
     
     default:                return "unknown";
@@ -159,7 +163,11 @@ void print_diag(const char *prgName)
   else      
   {
     printf("%s: type            = %s\n",              prgName, getNameOfInterface(diag.wType));
-    if ((diag.wType == HW_USB) || (diag.wType == HW_USB_PRO))
+    if ((diag.wType == HW_USB)
+#ifdef HW_USB_PRO
+ || (diag.wType == HW_USB_PRO)
+#endif
+)
     {
       printf("             Serial Number   = 0x%08x\n", diag.dwBase);
       printf("             Device Number   = %d\n",     diag.wIrqLevel);
