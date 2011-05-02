@@ -14,3 +14,12 @@
 
 2011-03-17 - 7.1 - content:
 - support of dynamic usb minors allocation (kernel config option)
+
+2011-03-24 - 7.1.1 - content:
+- fix typo in src/pcan_dongle.c to be able to use the PCAN-Dongle
+
+2011-04-08 - 7.1.2 - content:
+- fix sja1000 mutual exclusion in write() functions
+
+2011-04-21 - 7.2 - content:
+- support 2.6.38.3 kernel

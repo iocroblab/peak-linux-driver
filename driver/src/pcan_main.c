@@ -45,10 +45,14 @@
 #include <src/pcan_common.h>     // must always be the 1st include
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
 #include <linux/config.h>
+
+#elif !defined(AUTOCONF_INCLUDED)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+#include <generated/autoconf.h>
 #else
-#ifndef AUTOCONF_INCLUDED
 #include <linux/autoconf.h>
 #endif
+#define AUTOCONF_INCLUDED
 #endif
 
 // #define KBUILD_MODNAME pcan
@@ -503,6 +507,7 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
   pcan_fifo_init(&dev->writeFifo,  &dev->wMsg[0], &dev->wMsg[WRITE_MESSAGE_COUNT - 1], WRITE_MESSAGE_COUNT, sizeof(TPCANMsg) );
 
   INIT_LOCK(&dev->wlock);
+  INIT_LOCK(&dev->isr_lock);
 }
 
 //----------------------------------------------------------------------------
@@ -550,7 +555,14 @@ int init_module(void)
   pcan_drv.szVersionString = CURRENT_RELEASE; // get the release name global
   pcan_drv.nMajor          = PCAN_MAJOR;
 
-  printk(KERN_INFO "%s: %s\n", DEVICE_NAME, pcan_drv.szVersionString);
+  printk(KERN_INFO "%s: %s ", DEVICE_NAME, pcan_drv.szVersionString);
+#if defined(__BIG_ENDIAN)
+  printk("(be)\n");
+#elif defined(__LITTLE_ENDIAN)
+  printk("(le)\n");
+#else
+#error Endian not set
+#endif
   printk(KERN_INFO "%s: driver config%s\n", DEVICE_NAME, current_config);
   #ifdef DEBUG
   printk(KERN_INFO "%s: DEBUG is switched on\n", DEVICE_NAME);

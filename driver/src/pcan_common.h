@@ -54,7 +54,12 @@
 
 // support for MODVERSIONS
 #ifndef AUTOCONF_INCLUDED
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+#include <generated/autoconf.h>
+#else
 #include <linux/autoconf.h>
+#endif
+#define AUTOCONF_INCLUDED
 #endif
 
 #if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
@@ -182,9 +187,9 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous
 // with SVN
-#define CURRENT_RELEASE "Release_20110317_n"  // $name$
+#define CURRENT_RELEASE "Release_20110421_n"  // $name$
 #define PCAN_VERSION_MAJOR             7
-#define PCAN_VERSION_MINOR             1
+#define PCAN_VERSION_MINOR             2
 #define PCAN_VERSION_SUBMINOR          0
 #define CURRENT_VERSIONSTRING          __stringify(PCAN_VERSION_MAJOR)"."__stringify(PCAN_VERSION_MINOR)"."__stringify(PCAN_VERSION_SUBMINOR)
 

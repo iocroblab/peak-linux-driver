@@ -385,7 +385,7 @@ static int  pcan_dongle_init(struct pcandev *dev, u32 dwPort, u16 wIrq, char *ty
   else
     dev->port.dng.wIrq   = wIrq;    
   
-  dev->nMinor = pcan_drv.nMajor;
+  dev->nMajor = pcan_drv.nMajor;
   if (dev->wType == HW_DONGLE_SJA)
   {
     dev->nMinor        = PCAN_DNG_SP_MINOR_BASE + sp_devices; 

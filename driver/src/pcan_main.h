@@ -392,6 +392,7 @@ typedef struct pcandev
 	TPCANMsg     wMsg[WRITE_MESSAGE_COUNT];                  // all write messages
 	void *filter;                                            // a ID filter - currently associated to device
 	spinlock_t wlock;                                        // mutual exclusion lock for write invocation
+	spinlock_t isr_lock;                                     // in isr
 } PCANDEV;
 
 #ifdef USB_SUPPORT
