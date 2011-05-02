@@ -340,9 +340,7 @@ TPDIAG pcan_ioctl_diag_common(struct pcandev *dev)
       local.wIrqLevel   = dev->port.pci.wIrq;
       break;
     case HW_USB:
-#ifdef HW_USB_PRO
     case HW_USB_PRO:
-#endif
 #ifdef USB_SUPPORT
       local.dwBase    = dev->port.usb.usb_if->dwSerialNumber;
       local.wIrqLevel = dev->port.usb.ucHardcodedDevNr;

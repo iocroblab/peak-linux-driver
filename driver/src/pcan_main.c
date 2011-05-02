@@ -353,9 +353,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count, 
         wIrq   = dev->port.pci.wIrq;
         break;
       case HW_USB:
-#ifdef HW_USB_PRO
       case HW_USB_PRO:
-#endif
 #ifdef USB_SUPPORT
         // get serial number of device
         if (dev->ucPhysicallyInstalled)
