@@ -12,7 +12,7 @@
 #
 # Makefile for Peak CAN interface drivers (ISA, PC/104, PCI, DONGLE, USB, PCCARD)
 #
-# $Id: Makefile 638 2011-01-12 13:15:30Z stephane $
+# $Id: Makefile 636 2010-10-24 20:45:55Z khitschler $
 #
 #****************************************************************************
 
@@ -47,12 +47,12 @@
 #****************************************************************************
 # please modify only here if your kernel path is elsewhere located
 #
-KERNEL_LOCATION = /usr/src/linux
+KERNEL_LOCATION = 
 
 #****************************************************************************
 # probe various standard kernel locations
 #
-ifneq ($(shell if test -d $(KERNEL_LOCATION) ; then echo "true" ; fi), true)
+ifneq ($(shell if test -n "$(KERNEL_LOCATION)"; then if test -d $(KERNEL_LOCATION); then echo "true"; fi; fi), true)
 
 # ubuntu
 ifeq ($(shell if test -d "/usr/src/linux-headers-`uname -r`" ; then echo "true" ; fi), true)
@@ -255,7 +255,8 @@ pcan-objs += $(SRC)/pcan_pccard_kernel.o $(SRC)/pcan_pccard.o
 endif
 
 ifeq ($(USB),USB_SUPPORT)
-pcan-objs += $(SRC)/pcan_usb_kernel.o $(SRC)/pcan_usb.o 
+pcan-objs += $(SRC)/pcan_usb_core.o $(SRC)/pcan_usb.o
+pcan-objs += $(SRC)/pcan_usbpro.o $(SRC)/pcan_timing.o
 endif
 
 ifeq ($(NET),NETDEV_SUPPORT)
@@ -390,6 +391,8 @@ install: compat
 		echo "Info: Left current 'pcan'-entry in $(MODCONF) untouched.";\
 	fi
 	@if [ $(UDEV) = "yes" ]; then\
+		cp -f udev/pcan_usb_minor_check.bash /usr/local/bin;\
+		chmod 744 /usr/local/bin/pcan_usb_minor_check.bash;\
 		cp -f udev/45-pcan.rules /etc/udev/rules.d ; /sbin/udevadm control --reload-rules; \
 		echo "Info: Copied 45-pcan.rules to /etc/udev/rules.d.";\
 	else\
