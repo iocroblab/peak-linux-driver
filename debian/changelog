@@ -1,7 +1,6 @@
 peak-linux-driver (7.2-1) unstable; urgency=low
 
   * Updated to upstream version 7.2.
-  * Disable HW_USB_PRO. It was not built into the kernel module.
 
  -- Markus Becker <mab@comnets.uni-bremen.de>  Mon, 02 May 2011 09:14:35 +0200
 
