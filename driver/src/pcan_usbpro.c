@@ -197,7 +197,7 @@ void dump_mem(char *prompt, void *p, int l)
 	printk("%sDumping %s (%d bytes):\n", kern, prompt?prompt:"memory", l);
 	for (i=0; i < l; )
 	{
-		if ((i % 16) == 0) printk(kern);
+		if ((i % 16) == 0) printk("%s", kern);
 		printk("%02X ", *pc++);
 		if ((++i % 16) == 0) printk("\n");
 	}
@@ -1324,6 +1324,7 @@ int pcan_usbpro_get_serial_nr(struct pcan_usb_interface *usb_if,
 
 		err = 0;
 	}
+	else pr_info("%s(): unable to retrieve serial number from bootloader info (err=%d)\n", __func__, err);
 
 	return err;
 }
@@ -2016,26 +2017,10 @@ static
 int pcan_usbpro_ctrl_init(struct pcandev *dev)
 {
 	int err;
-	int can_retry = 3;
 	USB_PORT *u = &dev->port.usb;
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", 
 	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index);
-
-	/* get device number */
-	/* sometimes, need to retry... */
-	do
-	{
-		uint32_t device_nr32;
-		err = pcan_usbpro_get_device_nr(dev, &device_nr32);
-		if (!err)
-		{
-			u->ucHardcodedDevNr = (uint8_t )device_nr32;
-		}
-	}
-	while (--can_retry && (err == -ENOENT));
-
-	if (!can_retry) return err;
 
 	/* now, seems that may avoid to retry... */
 	/* request now for 1st calibration message (on 1st ctrl only) */

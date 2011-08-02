@@ -839,7 +839,7 @@ static int assignMinorNumber(struct pcandev *dev)
 static int pcan_usb_create_dev(struct pcan_usb_interface *usb_if,
                                int ctrl_index)
 {
-	int err;
+	int err, retry;
 	struct pcandev *dev;
 	struct usb_device *usb_dev = usb_if->usb_dev;
 	USB_PORT *u;
@@ -929,6 +929,19 @@ static int pcan_usb_create_dev(struct pcan_usb_interface *usb_if,
 
 	// get serial number early
 	usb_if->device_get_snr(usb_if, &usb_if->dwSerialNumber);
+
+	/* Get device number early too */
+	/* sometimes, need to retry... */
+	for (retry=3; retry; retry--)
+	{
+		uint32_t device_nr32;
+		err = usb_if->device_ctrl_get_dnr(dev, &device_nr32);
+		if (!err)
+		{
+			u->ucHardcodedDevNr = (uint8_t )device_nr32;
+			break;
+		}
+	}
 
 	/* Call hardware supplied own callback to do some private init */
 	if (usb_if->device_ctrl_init)
@@ -1153,7 +1166,7 @@ static int pcan_usb_plugin(struct usb_interface *interface,
 		}
 	}
 
-	/* ucRevision nneds to be defined before allocating resources (PCAN-USB) */
+	/* ucRevision needs to be defined before allocating resources (PCAN-USB) */
 #if defined(__LITTLE_ENDIAN)
 	usb_if->ucHardcodedDevNr = (uint8_t)(usb_if->usb_dev->descriptor.bcdDevice & 0xff);
 	usb_if->ucRevision = (uint8_t)(usb_if->usb_dev->descriptor.bcdDevice >> 8);
@@ -1163,6 +1176,8 @@ static int pcan_usb_plugin(struct usb_interface *interface,
 #else
 #error "Please fix the endianness defines in <asm/byteorder.h>"
 #endif
+
+	DPRINTK(KERN_DEBUG "%s(): ucHardcodedDevNr=0x%02x ucRevision=0x%02X\n", __func__, usb_if->ucHardcodedDevNr, usb_if->ucRevision);
 
 	if ((err = pcan_usb_allocate_resources(usb_if)))
 		goto reject;
@@ -1475,8 +1490,13 @@ void pcan_usb_deinit(void)
 	if (pcan_drv.usbdrv.probe == pcan_usb_plugin)
 	{
 		/* Added this since it is the last chance for URB submitting */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,18)
 		int err = driver_for_each_device(&pcan_drv.usbdrv.drvwrap.driver, 
 		                                 NULL, NULL, pcan_usb_do_cleanup);
+#else
+		int err = driver_for_each_device(&pcan_drv.usbdrv.driver, 
+		                                 NULL, NULL, pcan_usb_do_cleanup);
+#endif
 
 		/* driver_for_each_device() is declared with "must_check" attribute */
 		/* so check err here, knowing that drv is not NULL (1st arg) and that */

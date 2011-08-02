@@ -92,6 +92,9 @@ FILES1  = $(SRC)/$(TARGET1).c $(SRC)/common.c
 
 TARGET2 = transmitest
 FILES2  = $(SRC)/$(TARGET2).cpp $(SRC)/common.c $(SRC)/parser.cpp
+
+TARGET6 = selecttest
+FILES6  = $(SRC)/$(TARGET6).c
 else
 TARGET1 = receivetest
 FILES1  = $(SRC)/$(TARGET1)_rt.c $(SRC)/common.c
@@ -110,7 +113,7 @@ TARGET5 = pcan-settings
 FILES5  = $(SRC)/$(TARGET5).c
 
 
-all:    $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5)
+all:    $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5) $(TARGET6)
 
 $(TARGET1): $(FILES1)
 	$(CC) $(FILES1) $(CFLAGS) -o $(TARGET1) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) $(USERAPP_LIBS) -D$(RT)
@@ -127,9 +130,11 @@ $(TARGET4): $(FILES4)
 $(TARGET5): $(FILES5)
 	$(CC) $(FILES5) $(CFLAGS) -o $(TARGET5) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) -lpopt -g
 
+$(TARGET6): $(FILES6)
+	$(CC) $(FILES6) $(CFLAGS) -o $(TARGET6) $(USERAPP_CFLAGS) $(USERAPP_LDFLAGS) $(USERAPP_LIBS)
 	
 clean:
-	rm -f $(SRC)/*~ $(SRC)/*.o *~ $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5)
+	rm -f $(SRC)/*~ $(SRC)/*.o *~ $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET5) $(TARGET6)
 	
 install:
 	cp $(TARGET1) /usr/local/bin

@@ -39,6 +39,11 @@
 // INCLUDES
 #include <src/pcan_common.h>     // must always be the 1st include
 
+/* SGr on 19-07-2011: PCCARD_SUPPORT may be undefined in pcan_common.h if */
+/* kernel support not configured, even if PCCARD_SUPPORT is defined on command*/
+/* line. */
+#ifdef PCCARD_SUPPORT
+
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
@@ -170,3 +175,4 @@ int  pcan_pccard_register_devices(void)
   return ret;
 }
 // finish
+#endif /* PCCARD_SUPPORT */
