@@ -23,3 +23,25 @@
 
 2011-04-21 - 7.2 - content:
 - support 2.6.38.3 kernel
+
+2011-07-19 - 7.2.1 - content:
+- support of older kernel which don't define list_for_each_prev_safe and
+  usb_driver structure don't define 'drvwrap' field (2.6.18 for example).
+- fix - non - support of pc-card even if PCCARD_SUPPORT is defined on command
+  line.
+
+2011-07-26 - 7.2.2 - content:
+- fix pcan usb regression issue (device number now back in irq field/column)
+- add support for kernel 3.0
+
+2011-07-27 - 7.3 - content:
+- include all 7.2.x patches
+- add support for OpenSUSE 11.3 x86_64
+
+2011-07-28 - 7.3 - content:
+- new delivery because of OpenSUSE config issue (missing i2c and pcmcia modules)
+  while options are set in the kernel! So this delivery is quite the same than
+  2011-07-27 but enforces some kernel config check and removes a patch of a
+  customer that brought some warning on 64-bits compilation.
+- the 2011-07-27 delivery should not be used and will be renamed in svn repo
+  into "Release_20110727_n-7.3-dontuse"

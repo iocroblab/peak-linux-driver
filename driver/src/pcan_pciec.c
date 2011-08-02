@@ -33,6 +33,8 @@
 //****************************************************************************
 // INCLUDES
 #include <src/pcan_common.h>     // must always be the 1st include
+
+#ifdef PCIEC_SUPPORT
 #include <src/pcan_pciec.h>
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
@@ -452,4 +454,4 @@ void pcan_pciec_delete_card(struct pcandev *dev)
   }
 }
 
-
+#endif /* PCIEC_SUPPORT */

@@ -64,7 +64,9 @@
 extern "C" {
 #endif
 
+#ifdef USB_SUPPORT
 int pcan_usb_init(struct pcan_usb_interface *dev);
+#endif
 
 #ifdef __cplusplus__
 };

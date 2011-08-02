@@ -110,6 +110,11 @@
   #undef PCCARD_SUPPORT
 #endif
 
+// support for PCIe (need I2C algo)
+#if !defined(CONFIG_I2C_ALGOBIT) && !defined(CONFIG_I2C_ALGOBIT_MODULE)
+#undef PCIEC_SUPPORT
+#endif
+
 // support only versions 2.4.x and 2.6.x
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,0)
   #error "This kernel is too old and not supported"
@@ -184,12 +189,22 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 // moved from pcan_main.h
 #define DEVICE_NAME      "pcan"                            // the name of the module and the proc entry
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+/*
+ * This has been added in 2.6.24
+ */
+#define list_for_each_prev_safe(pos, n, head) \
+   for (pos = (head)->prev, n = pos->prev; \
+        prefetch(pos->prev), pos != (head); \
+        pos = n, n = pos->prev)
+#endif
+
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous
 // with SVN
-#define CURRENT_RELEASE "Release_20110421_n"  // $name$
+#define CURRENT_RELEASE "Release_20110728_n"  // $name$
 #define PCAN_VERSION_MAJOR             7
-#define PCAN_VERSION_MINOR             2
+#define PCAN_VERSION_MINOR             3
 #define PCAN_VERSION_SUBMINOR          0
 #define CURRENT_VERSIONSTRING          __stringify(PCAN_VERSION_MAJOR)"."__stringify(PCAN_VERSION_MINOR)"."__stringify(PCAN_VERSION_SUBMINOR)
 

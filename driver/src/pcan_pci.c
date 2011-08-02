@@ -383,7 +383,7 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
 }
 
 #ifdef PCIEC_SUPPORT  // move to event driven creation of devices, not for kernels 2.4.x
-static int __devinit pcan_pci_probe(struct pci_dev *pciDev, const struct pci_device_id *ent)
+static int pcan_pci_probe(struct pci_dev *pciDev, const struct pci_device_id *ent)
 {
   int result                 = 0;
   struct pcandev *dev        = NULL;
@@ -438,7 +438,7 @@ static int __devinit pcan_pci_probe(struct pci_dev *pciDev, const struct pci_dev
   return result;
 }
 
-static void __devexit pcan_pci_remove(struct pci_dev *pciDev)
+static void pcan_pci_remove(struct pci_dev *pciDev)
 {
   struct pcandev *dev;
   struct list_head *pos;

@@ -64,6 +64,11 @@ ifeq ($(shell if test -d "/usr/src/linux-`uname -r`" ; then echo "true" ; fi), t
 KERNEL_LOCATION = $(shell echo "/usr/src/linux-`uname -r`")
 endif
 
+# install from homebrew kernels symlinking to kernel source in /lib/modules/<kernel>/build
+ifeq ($(shell if test -d "/lib/modules/`uname -r`/build" ; then echo "true" ; fi), true)
+KERNEL_LOCATION = $(shell echo "/lib/modules/`uname -r`/build")
+endif
+
 endif
 
 #****************************************************************************
@@ -108,13 +113,20 @@ INSTALL_LOCATION = /lib/modules/$(VERSION)/misc
 
 #****************************************************************************
 # get extracted kernel VERSION and PATCHLEVEL for comparison
-# decide to use KBUILD for kernels greater 2.6.0
 #
 KVERSION    := $(shell echo $(VERSION) | sed -e 's;\([1-9]\)\..*;\1;g' )
 KPATCHLEVEL := $(shell echo $(VERSION) | sed -e 's;[1-9]\.\([0-9]\{0,3\}\)\..*;\1;g' )
 SUBLEVEL    := $(shell echo $(VERSION) | sed -e 's;[1-9]\.[0-9]\{0,3\}\.\([0-9]\{0,3\}\).*;\1;g' )
-USEKBUILD   := $(shell if [ $(KVERSION) -gt 2 ] || [ $(KVERSION) -eq 2 ] && [ $(KPATCHLEVEL) -ge 6 ]  ; \
+
+#****************************************************************************
+# decide to use KBUILD for 2.6.x and 3.x.x kernels
+#
+USEKBUILD   := $(shell if [ $(KVERSION) -eq 3 ]  ; then echo "yes" ; else echo "no"  ; fi)
+
+ifeq ($(USEKBUILD),no)
+USEKBUILD   := $(shell if [ $(KVERSION) -eq 2 ] && [ $(KPATCHLEVEL) -eq 6 ]  ; \
                  then echo "yes" ; else echo "no"  ; fi)
+endif
 
 #****************************************************************************
 # some common switches and defines

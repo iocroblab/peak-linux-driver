@@ -590,10 +590,8 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
       {
         #ifdef __LP64__
         #warning "Compiling for __LP64__"
-        printk(KERN_ERR "%s: fault in pcan_write() %ld %u, %u: \n", DEVICE_NAME, count, amount, offset);
-        #else
-        printk(KERN_ERR "%s: fault in pcan_write() %d %u, %u: \n", DEVICE_NAME, count, amount, offset);
         #endif
+        printk(KERN_ERR "%s: fault in pcan_write() %zu %u, %u: \n", DEVICE_NAME, count, amount, offset);
         return -EFAULT;
       }
 
