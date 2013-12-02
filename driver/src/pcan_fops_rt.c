@@ -322,7 +322,7 @@ int pcan_ioctl_extended_status_rt(rtdm_user_info_t *user_info, struct pcanctx_rt
   DPRINTK(KERN_DEBUG "%s: pcan_ioctl_rt(PCAN_GET_EXT_STATUS)\n", DEVICE_NAME);
 
   dev = ctx->dev;
-  local = pcan_ioctl_extended_status_common(dev);
+  pcan_ioctl_extended_status_common(dev, &local);
 
   if (copy_to_user_rt(user_info, status, &local, sizeof(local)))
   {
@@ -348,7 +348,7 @@ int pcan_ioctl_status_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TP
   DPRINTK(KERN_DEBUG "%s: pcan_ioctl_rt(PCAN_GET_STATUS)\n", DEVICE_NAME);
 
   dev = ctx->dev;
-  local = pcan_ioctl_status_common(dev);
+  pcan_ioctl_status_common(dev, &local);
 
   if (copy_to_user_rt(user_info, status, &local, sizeof(local)))
   {
@@ -375,7 +375,7 @@ int pcan_ioctl_diag_rt(rtdm_user_info_t *user_info, struct pcanctx_rt *ctx, TPDI
 
   dev = ctx->dev;
 
-  local = pcan_ioctl_diag_common(dev);
+  pcan_ioctl_diag_common(dev, &local);
 
   if (copy_to_user_rt(user_info, diag, &local, sizeof(local)))
     err = -EFAULT;

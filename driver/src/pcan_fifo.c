@@ -44,7 +44,9 @@
 #include <linux/errno.h>    // error codes
 #include <linux/string.h>   // memcpy
 #include <linux/sched.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)
 #include <asm/system.h>     // cli(), save_flags(), restore_flags()
+#endif
 #include <linux/spinlock.h>
 
 #include <src/pcan_fifo.h>

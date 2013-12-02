@@ -41,6 +41,7 @@
 //****************************************************************************
 // INCLUDES
 #include <src/pcan_common.h>     // must always be the 1st include
+
 #include <linux/ioport.h>
 #include <linux/pci.h>      // all about pci
 #include <asm/io.h>
@@ -67,6 +68,12 @@
 #define PEAK_PCI_VENDOR_ID   0x001C  // the PCI device and vendor IDs
 #define PEAK_PCI_DEVICE_ID   0x0001  // ID for PCI / PCIe Slot cards
 #define PEAK_PCIE_CARD_ID    0x0002  // ID for PCIExpress Card
+#define PEAK_PCIE_DEVICE_ID  0x0003  // ID for new PCIe Slot cards
+#define PEAK_CPCI_ID         0x0004  // ID for new cPCI
+#define PEAK_MINIPCI_ID      0x0005  // ID for miniPCI
+#define PEAK_PC104PLUS_ID    0x0006  // ID for new PC-104 Plus
+#define PEAK_PC104E_ID       0x0007  // ID for PC-104 Express
+#define PEAK_MINIPCIE_ID     0x0008  // ID for miniPCIe Slot cards
 
 #define PCI_CONFIG_PORT_SIZE 0x1000  // size of the config io-memory
 #define PCI_PORT_SIZE        0x0400  // size of a channel io-memory
@@ -78,13 +85,19 @@
 //****************************************************************************
 // GLOBALS
 #ifdef UDEV_SUPPORT
-static struct pci_device_id pcan_pci_tbl[] =
+static const struct pci_device_id pcan_pci_tbl[] =
 {
-  {PEAK_PCI_VENDOR_ID, PEAK_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
-  #ifdef PCIEC_SUPPORT
-  {PEAK_PCI_VENDOR_ID, PEAK_PCIE_CARD_ID,  PCI_ANY_ID, PCI_ANY_ID, 0, 0},
-  #endif
-  {0, }
+	{PEAK_PCI_VENDOR_ID, PEAK_PCI_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_PCIE_DEVICE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_CPCI_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_MINIPCI_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_PC104PLUS_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_PC104E_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+	{PEAK_PCI_VENDOR_ID, PEAK_MINIPCIE_ID, PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+#ifdef PCIEC_SUPPORT
+	{PEAK_PCI_VENDOR_ID, PEAK_PCIE_CARD_ID,  PCI_ANY_ID, PCI_ANY_ID, 0, 0},
+#endif
+	{0, }
 };
 
 #ifndef PCIEC_SUPPORT
@@ -229,6 +242,8 @@ static int pcan_pci_release(struct pcandev *dev)
 
 static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwPort, u16 wIrq, struct pcandev *master_dev)
 {
+  int err;
+
   DPRINTK(KERN_DEBUG "%s: pcan_pci_channel_init(), _pci_devices = %d\n", DEVICE_NAME, _pci_devices);
 
   dev->props.ucMasterDevice = CHANNEL_MASTER; // obsolete - will be removed soon
@@ -259,13 +274,23 @@ static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwP
 
   // reject illegal combination
   if (!dwPort || !wIrq)
+  {
+    pr_info("%s: %s(): illegal combination dwPort=%d wIrq=%d\n",
+            DEVICE_NAME, __func__, dwPort, wIrq);
     return -EINVAL;
+  }
 
   // do it only if the device is channel master, and channel 0 is it always
   if (dev->port.pci.nChannel == 0)
   {
-    if (check_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE))
+    err = check_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE);
+    if (err)
+    {
+      pr_info("%s: %s(@%d) check_mem_region(%d, %d) failure (err=%d)\n", 
+              DEVICE_NAME, __func__, __LINE__, dev->port.pci.dwConfigPort, 
+              PCI_CONFIG_PORT_SIZE, err);
       return -EBUSY;
+    }
 
     request_mem_region(dev->port.pci.dwConfigPort, PCI_CONFIG_PORT_SIZE, "pcan");
 
@@ -273,7 +298,12 @@ static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwP
 
     dev->port.pci.pvVirtConfigPort = ioremap(dwConfigPort, PCI_CONFIG_PORT_SIZE);
     if (dev->port.pci.pvVirtConfigPort == NULL)
+    {
+      pr_info("%s: %s(@%d) ioremap(%d, %d) failure\n", 
+              DEVICE_NAME, __func__, __LINE__, 
+              dwConfigPort, PCI_CONFIG_PORT_SIZE);
       return -ENODEV;
+    }
 
     dev->wInitStep = 2;
 
@@ -290,8 +320,15 @@ static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwP
   else
     dev->port.pci.pvVirtConfigPort = master_dev->port.pci.pvVirtConfigPort;
 
-  if (check_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE))
+  err = check_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE);
+  if (err)
+  {
+      pr_info("%s: %s(@%d) check_mem_region(%d, %d) failure (err=%d)\n", 
+              DEVICE_NAME, __func__, __LINE__, dev->port.pci.dwPort, 
+              PCI_PORT_SIZE, err);
+ 
     return -EBUSY;
+  }
 
   request_mem_region(dev->port.pci.dwPort, PCI_PORT_SIZE, "pcan");
 
@@ -300,7 +337,14 @@ static int  pcan_pci_channel_init(struct pcandev *dev, u32 dwConfigPort, u32 dwP
   dev->port.pci.pvVirtPort = ioremap(dwPort, PCI_PORT_SIZE);
 
   if (dev->port.pci.pvVirtPort == NULL)
+  {
+    pr_info("%s: %s(@%d) ioremap(%d, %d) failure\n", 
+            DEVICE_NAME, __func__, __LINE__, 
+            dwPort, PCI_PORT_SIZE);
+
     return -ENODEV;
+  }
+
   dev->wInitStep = 4;
 
   _pci_devices++;
@@ -349,7 +393,10 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
 
   if (result)
   {
+#ifndef PCIEC_SUPPORT
+    /* Thanks Hardi! */	
     local_dev->cleanup(local_dev);
+#endif
     kfree(local_dev);
     *dev = NULL;
   }
@@ -368,8 +415,8 @@ static int create_one_pci_device(struct pci_dev *pciDev, int nChannel, struct pc
     }
     #endif
 
-    list_add_tail(&local_dev->list, &pcan_drv.devices);  // add this device to the list
-    pcan_drv.wDeviceCount++;
+	/* add this device to the list */
+	pcan_add_device_in_list(local_dev);
     *dev = local_dev;
   }
 
@@ -446,6 +493,8 @@ static void pcan_pci_remove(struct pci_dev *pciDev)
 
   DPRINTK(KERN_DEBUG "%s: pcan_pci_remove(%p)\n", DEVICE_NAME, pciDev);
 
+	mutex_lock(&pcan_drv.devices_lock);
+
   list_for_each_prev_safe(pos, n, &pcan_drv.devices)
   {
     dev = list_entry(pos, struct pcandev, list);
@@ -453,12 +502,16 @@ static void pcan_pci_remove(struct pci_dev *pciDev)
     {
       pcan_pci_cleanup(dev);
       list_del(&dev->list);
+      pcan_drv.wDeviceCount--;
+
       dev->ucPhysicallyInstalled = 0; // TODO: a much better hack to address plugging out while a path to the device is open
 
       // free all device allocated memory
       kfree(dev);
     }
   }
+
+  	mutex_unlock(&pcan_drv.devices_lock);
 
   pci_disable_device(pciDev);
 }

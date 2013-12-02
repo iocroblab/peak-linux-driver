@@ -217,6 +217,12 @@ struct pcan_usbpro_canmsg_rx_t
 
 }  __attribute__ ((packed));
 
+/* Defines for status */
+#define FW_USBPRO_STATUS_MASK_ERROR_S     0x0001
+#define FW_USBPRO_STATUS_MASK_BUS_S       0x0002
+#define FW_USBPRO_STATUS_MASK_OVERRUN_S   0x0004
+#define FW_USBPRO_STATUS_MASK_QOVERRUN_S  0x0008
+
 struct pcan_usbpro_canmsg_status_error_rx_t
 {
 	uint8_t	data_type;

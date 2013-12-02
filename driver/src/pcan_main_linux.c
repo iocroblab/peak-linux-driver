@@ -120,7 +120,9 @@ static int dev_register(void)
 		// create all netdevice entries except those for hotplug-devices
 		// USB   : is done by pcan_usb_plugin().
 		// PCCARD: is done by pcan_pccard_register_devices() at driver init time
-		//         (here & now! - see above) or at plugin time.
+		//         (here & now! - see above) or at plugin t/ime.
+		mutex_lock(&pcan_drv.devices_lock);
+
 		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
 		{
 			pdev = (struct pcandev *)ptr;
@@ -134,6 +136,8 @@ static int dev_register(void)
 				pcan_netdev_register(pdev);
 			}
 		}
+
+		mutex_unlock(&pcan_drv.devices_lock);
 	}
 #endif
 
@@ -141,6 +145,8 @@ static int dev_register(void)
 	{
 		struct list_head *ptr;
 		struct pcandev   *dev;
+
+		mutex_lock(&pcan_drv.devices_lock);
 
 		for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
 		{
@@ -151,6 +157,11 @@ static int dev_register(void)
 			  case HW_PCI:
 			  case HW_ISA:
 			  case HW_DONGLE_SJA:
+			  /*
+			   * udev events were not generated for ISA.
+			   * Thx David Leonard
+			   */
+			  case HW_ISA_SJA:
 			  case HW_DONGLE_SJA_EPP: pcan_device_node_create(dev);
 			    break;
 			  case HW_USB:
@@ -161,6 +172,8 @@ static int dev_register(void)
 			    break;
 			}
 		}
+
+		mutex_unlock(&pcan_drv.devices_lock);
 	}
 #endif
 
@@ -177,6 +190,8 @@ void dev_unregister(void)
 		struct list_head *ptr;
 		struct pcandev   *dev;
 
+		mutex_lock(&pcan_drv.devices_lock);
+
 		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
 		{
 			dev = (struct pcandev *)ptr;
@@ -185,6 +200,7 @@ void dev_unregister(void)
 			{
 			case HW_PCI:
 			case HW_ISA:
+			case HW_ISA_SJA:
 			case HW_DONGLE_SJA:
 			case HW_DONGLE_SJA_EPP: 
 				pcan_device_node_destroy(dev);
@@ -197,6 +213,8 @@ void dev_unregister(void)
 				break;
 			}
 		}
+
+		mutex_unlock(&pcan_drv.devices_lock);
 	}
 #endif
 
@@ -206,6 +224,8 @@ void dev_unregister(void)
 		struct pcandev   *pdev;
 		// remove all netdevice registrations except those for USB-devices
 		// which is done by pcan_usb_plugout().
+		mutex_lock(&pcan_drv.devices_lock);
+
 		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
 		{
 			pdev = (struct pcandev *)ptr;
@@ -218,6 +238,8 @@ void dev_unregister(void)
 				pcan_netdev_unregister(pdev);
 			}
 		}
+
+		mutex_unlock(&pcan_drv.devices_lock);
 	}
 #endif
 }
