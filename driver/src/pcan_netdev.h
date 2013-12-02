@@ -38,9 +38,6 @@
 #define PCAN_NETDEV_H
 
 #include <linux/netdevice.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
-#include <linux/can/dev.h>
-#endif
 
 #define CAN_NETDEV_NAME "can%d"
 
@@ -49,15 +46,11 @@
 #endif
 
 /* private data structure for netdevice */
-/* "struct can_priv" is defined since 2.6.31 in include/linux/net/can/dev.h */
-/* => rename our struct can_priv into struct pcan_priv and set kernel */
-/*    can_priv as first member */
-struct pcan_priv
+
+struct can_priv
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
   struct net_device_stats stats; /* standard netdev statistics */
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
-  struct can_priv         can;
 #endif
   struct pcandev          *pdev; /* back reference to PCAN device */
 };

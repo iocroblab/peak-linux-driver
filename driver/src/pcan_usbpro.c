@@ -32,20 +32,6 @@
 //
 // $Id: pcan_usbpro.c 615 2011-02-10 22:38:55Z stephane $
 //
-// 2011-08-22 SGr
-// - pcan_usbpro_cleanup(): add the sending of the bus off request in cleanup 
-//   callback since this is the last place we may submit urb to the device 
-//   before driver removal. Also remove led off request and let fw handle them.
-// - also move calibration messages management to controller init/cleanup
-//   callbacks to be sure they are sent.
-// - tell usb-pro that the driver is loaded/unloaded in order to let the fw
-//   handle the leds by itself
-//
-// 2011-10-10 SGr
-// - error messages better support
-// - handle big/little endian support
-// - handle eventual record fragmentation (doesnot occur w/ 1024 packets)
-//
 //****************************************************************************
 //#define DEBUG
 //#undef DEBUG
@@ -56,7 +42,6 @@
 #include <linux/sched.h>
 #include <src/pcan_main.h>
 #include <src/pcan_fifo.h>
-#include <src/pcan_usbpro.h>
 #include <src/pcan_usbpro.h>
 
 #ifdef NETDEV_SUPPORT
@@ -95,7 +80,7 @@
 
 /* PCAN-USB-PRO status flags */
 #define PCAN_USBPRO_BUS_HEAVY          0x01
-//#define PCAN_USBPRO_BUS_OFF            0x02
+#define PCAN_USBPRO_BUS_OFF            0x02
 #define PCAN_USBPRO_BUS_OVERRUN        0x0c
 
 /* interface private flags */
@@ -103,7 +88,6 @@
 
 /* device state flags */
 #define PCAN_USBPRO_SHOULD_WAKEUP      0x00000001UL
-#define PCAN_USBPRO_BUS_OFF            0x00000002UL
 
 /* pcan_usbpro_cmd_send_ex() flags */
 #define PCAN_USBPRO_SEND_SYNC_MODE     0x00000001
@@ -179,7 +163,7 @@ static void pcan_usbpro_calibration_timeout(unsigned long arg)
 {
 	struct pcan_usb_interface *usb_if = (struct pcan_usb_interface *)arg;
 
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __func__);
+	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	/* activate calibration messaging, asynchronous mode only */
 	/* (schedule() forbidden in timer routine) */
@@ -194,6 +178,31 @@ static void pcan_usbpro_calibration_timeout(unsigned long arg)
 	}
 }
 #endif
+
+/*
+ * void dump_mem(char *prompt, void *p, int l)
+ *
+ */
+static
+void dump_mem(char *prompt, void *p, int l)
+{
+#ifdef DEBUG
+	char *kern = KERN_DEBUG;
+#else
+	char *kern = KERN_INFO;
+#endif
+	uint8_t *pc = (uint8_t *)p;
+	int i;
+
+	printk("%sDumping %s (%d bytes):\n", kern, prompt?prompt:"memory", l);
+	for (i=0; i < l; )
+	{
+		if ((i % 16) == 0) printk("%s", kern);
+		printk("%02X ", *pc++);
+		if ((++i % 16) == 0) printk("\n");
+	}
+	if (i % 16) printk("\n");
+}
 
 /*
  * static int pcan_usbpro_sizeof_rec(uint8_t data_type)
@@ -306,7 +315,7 @@ static int pcan_usbpro_sizeof_rec(uint8_t data_type)
 
 	default:
 		printk(KERN_INFO "%s: %s(%d): unsupported data type\n",
-		       DEVICE_NAME, __func__, data_type);
+		       DEVICE_NAME, __FUNCTION__, data_type);
 	}
 
 	return -1;
@@ -368,7 +377,7 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 		*pc++ = (uint8_t )va_arg(ap, int);	// client
 		*pc++ = (uint8_t )va_arg(ap, int);	// flags
 		*pc++ = (uint8_t )va_arg(ap, int);	// len
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t));  // id
+		*(uint32_t *)pc =  va_arg(ap, uint32_t);  // id
 		pc += 4;
 		memcpy(pc, va_arg(ap, int *), i);
 		pc += i;
@@ -386,7 +395,7 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
 		pc += 2; // dummy
 		/* CCBT, devicenr */
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t));
+		*(uint32_t *)pc =  va_arg(ap, uint32_t);
 		pc += 4;
 		break;
 
@@ -401,46 +410,46 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
 		/* onoff, silentmode, warninglimit, filter_mode, reset, mode, */
 		/* start_or_end, bit_pos */
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int));
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int);
 		pc += 2;
 		break;
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_SETLOOKUP_EXPLICIT:
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_SET_CANLED:
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // id_type,mode
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // id_type, mode
 		pc += 2;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // id, timeout
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // id, timeout
 		pc += 4;
 		break;
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_SETLOOKUP_GROUP:
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // id_type
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // id_type
 		pc += 2;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // id_start
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // id_start
 		pc += 4;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // id_end
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // id_end
 		pc += 4;
 		break;
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_SETREGISTER:
 		*pc++ = (uint8_t )va_arg(ap, int);	// irq_off
 		pc += 2; // dummy
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // address
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // address
 		pc += 4;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // value
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // value
 		pc += 4;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // mask
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // mask
 		pc += 4;
 		break;
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_GETREGISTER:
 		*pc++ = (uint8_t )va_arg(ap, int);	// irq_off
 		pc += 2; // dummy
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // address
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // address
 		pc += 4;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // value
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // value
 		pc += 4;
 		break;
 
@@ -448,7 +457,7 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_USB_IN_PACKET_DELAY:
 		pc++; // dummy
 		/* mode, delay */
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // mode
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // mode
 		pc += 2;
 		break;
 
@@ -456,10 +465,9 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
 		pc++; // dummy
 		*pc++ = (uint8_t )va_arg(ap, int);	// mode
-		//*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // prescaler
-		pc += 2; // prescale (readonly)
-		//*(uint16_t *)pc = cpu_to_le32((uint16_t )va_arg(ap, int)); // sampletimequanta
-		*(uint16_t *)pc = cpu_to_le16(4096); // sampletimequanta
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // prescaler
+		pc += 2;
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // sampletimequanta
 		pc += 2;
 		break;
 
@@ -486,22 +494,22 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_ERROR_GEN_ID:
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // bit_pos
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // bit_pos
 		pc += 2;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // id
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // id
 		pc += 4;
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); // ok_counter
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // ok_counter
 		pc += 2;
-		*(uint16_t *)pc = cpu_to_le16((uint16_t )va_arg(ap, int)); //error_counter
+		*(uint16_t *)pc =  (uint16_t )va_arg(ap, int); // error_counter
 		pc += 2;
 		break;
 
 	case DATA_TYPE_USB2CAN_STRUCT_FKT_SET_SOFTFILER:
 		*pc++ = (uint8_t )va_arg(ap, int);	// channel
 		pc += 2;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // accmask
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // accmask
 		pc += 4;
-		*(uint32_t *)pc = cpu_to_le32(va_arg(ap, uint32_t)); // acccode
+		*(uint32_t *)pc =  va_arg(ap, uint32_t); // acccode
 		pc += 4;
 		break;
 
@@ -517,7 +525,7 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 
 	default:
 		printk(KERN_INFO "%s: %s(): unknown data type %02Xh (%d)\n",
-		       DEVICE_NAME, __func__, id, id);
+		       DEVICE_NAME, __FUNCTION__, id, id);
 		pc--;
 		break;
 	}
@@ -525,7 +533,7 @@ static int pcan_usbpro_msg_add_rec(struct pcan_usbpro_msg_t *pm,
 	l = pc - pm->rec_ptr;
 	if (l > 0)
 	{
-		*pm->u.rec_counter = cpu_to_le32(*pm->u.rec_counter+1);
+		(*pm->u.rec_counter)++;
 		*(pm->rec_ptr) = (uint8_t )id;
 
 		pm->rec_ptr = pc;
@@ -559,7 +567,7 @@ static void pcan_usbpro_submit_cmd_complete(purb_t purb)
 	struct pcan_usb_interface *usb_if = purb->context;
 
 	DPRINTK(KERN_DEBUG "%s: %s() = %d\n", 
-	        DEVICE_NAME, __func__, purb->status);
+	        DEVICE_NAME, __FUNCTION__, purb->status);
 
 	// un-register outstanding urb
 	atomic_dec(&usb_if->active_urbs);
@@ -582,7 +590,7 @@ static int pcan_usbpro_cmd_send_ex(struct pcan_usb_interface *usb_if,
 	struct urb *urb;
 	uint32_t ms_timeout;
 
-	DPRINTK(KERN_DEBUG "%s: %s(): ->EP#%02X\n", DEVICE_NAME, __func__,
+	DPRINTK(KERN_DEBUG "%s: %s(): ->EP#%02X\n", DEVICE_NAME, __FUNCTION__,
 	        usb_if->pipe_cmd_out.ucNumber);
 
 	// don't do anything with non-existent hardware
@@ -620,11 +628,10 @@ static int pcan_usbpro_cmd_send_ex(struct pcan_usb_interface *usb_if,
 	if (flags & PCAN_USBPRO_SEND_GET_TOD)
 		DO_GETTIMEOFDAY(usb_if->tv_request);
 
-	err = usb_submit_urb(urb, GFP_ATOMIC);
-	if (err)
+	if (usb_submit_urb(urb, GFP_ATOMIC))
 	{
-		printk(KERN_ERR "%s: %s(): usb_submit_urb() failure error %d\n", 
-		       DEVICE_NAME, __func__, err);
+		printk(KERN_ERR "%s: %s() usb_submit_urb() failure\n", 
+		       DEVICE_NAME, __FUNCTION__);
 		goto fail;
 	}
 
@@ -676,7 +683,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 	register purb_t urb = &usb_if->urb_cmd_sync;
 	uint8_t tmp[PCAN_USB_PRO_CMD_BUFFER_SIZE];
 
-	DPRINTK(KERN_DEBUG "%s: %s(): <-EP#%02X\n", DEVICE_NAME, __func__,
+	DPRINTK(KERN_DEBUG "%s: %s(): <-EP#%02X\n", DEVICE_NAME, __FUNCTION__,
 	        usb_if->pipe_cmd_in.ucNumber);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,8)
@@ -702,7 +709,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 			if (__usb_submit_urb(urb))
 			{
 				printk(KERN_ERR "%s: %s() __usb_submit_urb() failure\n", 
-				      DEVICE_NAME, __func__);
+				      DEVICE_NAME, __FUNCTION__);
 				break;
 			}
 
@@ -734,7 +741,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 				pc += 4;
 
 				DPRINTK(KERN_DEBUG "%s: %s(): message contains %d record(s)\n",
-			           DEVICE_NAME, __func__, rec_counter);
+			           DEVICE_NAME, __FUNCTION__, rec_counter);
 			
 				for (r=0; r < rec_counter; r++)
 				{
@@ -746,7 +753,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 					if (rec_size <= 0)
 					{
 						printk(KERN_INFO "%s: %s(): unable to read record in "
-						       "response\n", DEVICE_NAME, __func__);
+						       "response\n", DEVICE_NAME, __FUNCTION__);
 
 						for (i=0; i < urb->actual_length; )
 						{
@@ -776,7 +783,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 								DPRINTK(KERN_DEBUG "%s: %s(): no other criteria defined"
 								        " for data type %02Xh: considering response"
 								        " received\n",
-								        DEVICE_NAME, __func__, pr->data_type);
+								        DEVICE_NAME, __FUNCTION__, pr->data_type);
 								found_rec = 1;
 								break;
 							}
@@ -788,7 +795,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 					{
 						if (maxlen != rec_size)
 							printk(KERN_INFO "%s: %s(): maxlen=%d while rec_size=%d\n",
-							       DEVICE_NAME, __func__, maxlen, rec_size);
+							       DEVICE_NAME, __FUNCTION__, maxlen, rec_size);
 
 						memcpy(pv, pr, maxlen);
 
@@ -810,7 +817,7 @@ static int pcan_usbpro_read_rec(struct pcan_usb_interface *usb_if,
 			atomic_set(&usb_if->cmd_sync_complete, 0);
 
 			DPRINTK(KERN_DEBUG "%s: %s(): resubmitting URB...\n",
-		           DEVICE_NAME, __func__);
+		           DEVICE_NAME, __FUNCTION__);
 		}
 
 		schedule();
@@ -843,9 +850,8 @@ static int pcan_usbpro_set_can_on(struct pcandev *dev)
 	USB_PORT *u = &dev->port.usb;
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
-	int err;
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
@@ -854,9 +860,7 @@ static int pcan_usbpro_set_can_on(struct pcandev *dev)
 	                        u->dev_ctrl_index,
 	                        1);
 
-   err = pcan_usbpro_cmd_send(u->usb_if, &ub);
-
-	return err;
+   return pcan_usbpro_cmd_send(u->usb_if, &ub);
 }
 
 static int pcan_usbpro_set_can_off(struct pcandev *dev)
@@ -864,14 +868,9 @@ static int pcan_usbpro_set_can_off(struct pcandev *dev)
 	USB_PORT *u = &dev->port.usb;
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
-	int err;
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index);
-
-#ifdef PCAN_USBPRO_BUS_OFF
-	if (u->state & PCAN_USBPRO_BUS_OFF) return 0;
-#endif
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
 	pcan_usbpro_msg_add_rec(&ub, 
@@ -879,13 +878,7 @@ static int pcan_usbpro_set_can_off(struct pcandev *dev)
 	                        u->dev_ctrl_index,
 	                        0);
 
-   err = pcan_usbpro_cmd_send(u->usb_if, &ub);
-
-#ifdef PCAN_USBPRO_BUS_OFF
-	if (!err) u->state |= PCAN_USBPRO_BUS_OFF;
-#endif
-
-	return err;
+   return pcan_usbpro_cmd_send(u->usb_if, &ub);
 }
 
 #if 0
@@ -902,7 +895,7 @@ int pcan_usbpro_get_can_activity(struct pcandev *dev)
 	struct pcan_usbpro_bus_activity_t *pba;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index);
 
 	/* Keep record addr in message, to get the response */
@@ -937,7 +930,7 @@ int pcan_usbpro_set_warning_limit(struct pcandev *dev, uint16_t warning_limit)
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, limit=%u)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, limit=%u)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index, warning_limit);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
@@ -960,7 +953,7 @@ int pcan_usbpro_set_error_frame(struct pcandev *dev, uint16_t error_frame)
 	uint8_t tmp[32];
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, error_frame=%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, error_frame);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index, error_frame);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
 	pcan_usbpro_msg_add_rec(&ub,
@@ -984,7 +977,7 @@ int pcan_usbpro_set_silent_mode(struct pcandev *dev, int silent_on)
 	uint8_t tmp[32];
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, silent_on=%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, silent_on);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index, silent_on);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
 	pcan_usbpro_msg_add_rec(&ub,
@@ -1005,7 +998,7 @@ int pcan_usbpro_set_filter_mode(struct pcandev *dev, uint16_t filter_mode)
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, mode=%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, mode=%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index, filter_mode);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
@@ -1030,7 +1023,7 @@ int pcan_usbpro_calibration_request_ex(struct pcan_usb_interface *usb_if,
 	uint8_t tmp[32];
 	int err;
 
-	DPRINTK(KERN_DEBUG "%s: %s(mode=%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(mode=%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        onoff);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
@@ -1075,30 +1068,6 @@ int pcan_usbpro_calibration_request_ex(struct pcan_usb_interface *usb_if,
    return err;
 }
 
-#if 0
-/*
- * int pcan_usbpro_setget_buslast(struct pcandev *dev, uint8_t mode)
- */
-static
-int pcan_usbpro_setget_buslast(struct pcandev *dev, uint8_t mode)
-{
-	USB_PORT *u = &dev->port.usb;
-	struct pcan_usbpro_msg_t ub;
-	uint8_t tmp[32];
-
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, mode=%d)\n",
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, mode);
-
-	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
-	pcan_usbpro_msg_add_rec(&ub,
-	                        DATA_TYPE_USB2CAN_STRUCT_FKT_SETGET_BUSLAST_MSG,
-	                        u->dev_ctrl_index,
-	                        mode);
-
-	return pcan_usbpro_cmd_send(u->usb_if, &ub);
-}
-#endif
-
 /*
  * int pcan_usbpro_set_can_led(struct pcandev *dev, uint8_t mode, 
  *                             uint32_t timeout)
@@ -1111,8 +1080,8 @@ int pcan_usbpro_set_can_led(struct pcandev *dev, uint8_t mode,
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, mode=%d timeout=0x%x)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, mode, timeout);
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
+	        u->dev_ctrl_index);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
 	pcan_usbpro_msg_add_rec(&ub,
@@ -1136,7 +1105,7 @@ int pcan_usbpro_get_device_nr(struct pcandev *dev, uint32_t *p_device_nr)
    struct pcan_usbpro_dev_nr_t *pdn;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index);
 
 	/* Keep record addr in message, to get the response */
@@ -1171,7 +1140,7 @@ int pcan_usbpro_set_device_nr(struct pcandev *dev, uint32_t device_nr)
 	struct pcan_usbpro_msg_t ub;
 	uint8_t tmp[32];
 
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __func__, 
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", DEVICE_NAME, __FUNCTION__, 
 	        u->dev_ctrl_index);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
@@ -1194,7 +1163,7 @@ int pcan_usbpro_set_baudrate(struct pcandev *dev, uint32_t baudrate)
 	uint8_t tmp[32];
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, 0x%08x)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, baudrate);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index, baudrate);
 
 	pcan_usbpro_msg_init_empty(&ub, tmp, sizeof(tmp));
 	pcan_usbpro_msg_add_rec(&ub,
@@ -1258,7 +1227,7 @@ int pcan_usbpro_set_BTR0BTR1(struct pcandev *dev, uint16_t btr0btr1)
 	uint32_t CCBT; /* CAN Controller Bus Timing register */
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, 0x%04x)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, btr0btr1);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index, btr0btr1);
 
 	switch (btr0btr1)
 	{
@@ -1300,7 +1269,7 @@ int pcan_usbpro_set_serial_nr(struct pcan_usb_interface *usb_if, uint32_t dwSNR)
 	int err;
 
 	DPRINTK(KERN_DEBUG "%s: %s(SNR=0x%08x)\n", 
-	        DEVICE_NAME, __func__, dwSNR);
+	        DEVICE_NAME, __FUNCTION__, dwSNR);
 
 #ifdef USB_VENDOR_REQUEST_wVALUE_SETFKT_SERNER
 	{
@@ -1334,7 +1303,7 @@ int pcan_usbpro_get_serial_nr(struct pcan_usb_interface *usb_if,
 	struct pcan_usbpro_bootloader_info_t bi;
 	int err;
 
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __func__);
+	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	err = usb_control_msg(usb_if->usb_dev, 
 		                   usb_rcvctrlpipe(usb_if->usb_dev, 0),
@@ -1350,7 +1319,7 @@ int pcan_usbpro_get_serial_nr(struct pcan_usb_interface *usb_if,
 			*pdwSNR = le32_to_cpu(bi.serial_num_high);
 
 			DPRINTK(KERN_DEBUG "%s: %s(): SNR=0x%08x\n", 
-			        DEVICE_NAME, __func__, *pdwSNR);
+			        DEVICE_NAME, __FUNCTION__, *pdwSNR);
 		}
 
 		err = 0;
@@ -1371,7 +1340,7 @@ int pcan_usbpro_open(struct pcandev *dev, u16 btr0btr1, uint8_t listen_only)
 	USB_PORT *u = &dev->port.usb;
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d, btr0btr1=0x%04x, listen_only=%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index, btr0btr1, listen_only);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index, btr0btr1, listen_only);
 #endif
 
 	err = pcan_usbpro_set_BTR0BTR1(dev, btr0btr1);
@@ -1387,7 +1356,6 @@ int pcan_usbpro_open(struct pcandev *dev, u16 btr0btr1, uint8_t listen_only)
 	if (err)
 		goto fail;
 
-
 fail:
 	return err;
 }
@@ -1402,7 +1370,7 @@ int pcan_usbpro_close(struct pcandev *dev)
 	USB_PORT *u = &dev->port.usb;
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index);
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index);
 #endif
 
 	return 0;
@@ -1574,22 +1542,16 @@ int pcan_usbpro_handle_canmsg_rx(struct pcan_usb_interface *usb_if,
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d): "
 	        "rx=[client=0x%02x flags=0x%02x len=0x%02x "
 	        "timestamp32=0x%08x id=0x%08x]\n", 
-	        DEVICE_NAME, __func__, ctrl_index, 
+	        DEVICE_NAME, __FUNCTION__, ctrl_index, 
 	        rx->client, rx->flags, rx->len, rx->timestamp32, rx->id);
 #endif
 
+	/* Don't send any message when device not opened */
+	if (dev->nOpenPaths <= 0) return 0;
+
 	dev->dwInterruptCounter++;
 
-	/* Don't send any message when device not opened */
-	if (dev->nOpenPaths <= 0)
-	{
-		pr_info("%s: incoming message 0x%x (flags=%x) discarded: "
-		        "CAN#%d not yet opened\n",
-		        DEVICE_NAME, rx->id, rx->flags, ctrl_index);
-		return 0;
-	}
-
-	can_frame.can_id = le32_to_cpu(rx->id);
+	can_frame.can_id = rx->id;
 	can_frame.can_dlc = rx->len & 0x0f;
 
 	if (rx->flags & PCAN_USBPRO_RTR)
@@ -1599,7 +1561,7 @@ int pcan_usbpro_handle_canmsg_rx(struct pcan_usb_interface *usb_if,
 
 	memcpy(can_frame.data, &rx->data[0], can_frame.can_dlc);
 
-	pcan_usbpro_timestamp_decode(usb_if, le32_to_cpu(rx->timestamp32), &tv);
+	pcan_usbpro_timestamp_decode(usb_if, rx->timestamp32, &tv);
 
 	err = pcan_xxxdev_rx(dev, &can_frame, &tv);
 	if (err >= 0)
@@ -1617,7 +1579,6 @@ static
 int pcan_usbpro_handle_canmsg_status_err_rx(struct pcan_usb_interface *usb_if,
                                 struct pcan_usbpro_canmsg_status_error_rx_t *er)
 {
-	const uint32_t raw_status = le32_to_cpu(er->status);
 	const int ctrl_index = (er->channel >> 4) & 0x0f;
 	struct pcandev *dev = &usb_if->dev[ctrl_index];
 	struct can_frame can_frame;
@@ -1627,84 +1588,35 @@ int pcan_usbpro_handle_canmsg_status_err_rx(struct pcan_usb_interface *usb_if,
 #if 0
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d): "
 	        "rx=[status=0x%04x timestamp32=0x%08x error_frame=0x%08x]\n", 
-	        DEVICE_NAME, __func__, ctrl_index,
-	        raw_status, le32_to_cpu(er->timestamp32), 
-	        le32_to_cpu(er->error_frame));
+	        DEVICE_NAME, __FUNCTION__, ctrl_index,
+	        er->status, er->timestamp32, er->error_frame);
 #endif
+
+	/* Don't send any message when device not opened */
+	if (dev->nOpenPaths <= 0) return 0;
 
 	dev->dwInterruptCounter++;
 
-	/* Don't send any message when device not opened */
-	if (dev->nOpenPaths <= 0)
-   {
-		pr_info("%s: incoming error message status=0x%x error=0x%x discarded: "
-		        "CAN#%d not yet opened\n",
-		        DEVICE_NAME, raw_status, le32_to_cpu(er->error_frame),
-		        ctrl_index);
-		return 0;
-   }
+	/* No BUSLIGHT in USB-PRO? */
 
-	dev->wCANStatus |= raw_status;
-
-	memset(&can_frame, '\0', sizeof(can_frame));
-
-	if (raw_status & FW_USBPRO_STATUS_MASK_BUS_S)
+	if (er->status & PCAN_USBPRO_BUS_HEAVY)
 	{
-		/* Bus Off */
-		can_frame.can_id |= CAN_ERR_BUSOFF;
-		dev->dwErrorCounter++;
-	}
-	else
-	{
-		if (raw_status & FW_USBPRO_STATUS_MASK_ERROR_S)
-		{
-			const int rx_error_counter = \
-			                  (le32_to_cpu(er->error_frame) & 0x00ff0000) >> 16;
-			const int tx_error_counter = \
-			                  (le32_to_cpu(er->error_frame) & 0xff000000) >> 24;
-
-			if (rx_error_counter > 127)
-			{
-				/* Bus Heavy */
-				can_frame.can_id |= CAN_ERR_CRTL;
-				can_frame.data[1] |= CAN_ERR_CRTL_RX_PASSIVE;
-				dev->dwErrorCounter++;
-			}
-			else if (rx_error_counter > 96)
-			{
-				/* Bus Light */
-				can_frame.can_id |= CAN_ERR_CRTL;
-				can_frame.data[1] |= CAN_ERR_CRTL_RX_WARNING;
-				dev->dwErrorCounter++;
-			}
-
-			if (tx_error_counter > 127)
-			{
-				/* Bus Heavy */
-				can_frame.can_id |= CAN_ERR_CRTL;
-				can_frame.data[1] |= CAN_ERR_CRTL_TX_PASSIVE;
-				dev->dwErrorCounter++;
-			}
-
-			else if (tx_error_counter > 96)
-			{
-				/* Bus Light */
-				can_frame.can_id |= CAN_ERR_CRTL;
-				can_frame.data[1] |= CAN_ERR_CRTL_TX_WARNING;
-				dev->dwErrorCounter++;
-			}
-		}
-	}
-
-	if (raw_status & FW_USBPRO_STATUS_MASK_OVERRUN_S)
-	{
-		can_frame.can_id |= CAN_ERR_PROT;
-		can_frame.data[2] |= CAN_ERR_PROT_OVERLOAD;
+		dev->wCANStatus |= CAN_ERR_BUSHEAVY;
+		can_frame.can_id |= CAN_ERR_CRTL;
+		can_frame.data[1] |= CAN_ERR_CRTL_RX_WARNING;
 		dev->dwErrorCounter++;
 	}
 
-	if (raw_status & FW_USBPRO_STATUS_MASK_QOVERRUN_S)
+	if (er->status & PCAN_USBPRO_BUS_OFF)
 	{
+		dev->wCANStatus |= CAN_ERR_BUSOFF;
+		can_frame.can_id |= CAN_ERR_BUSOFF_NETDEV;
+		dev->dwErrorCounter++;
+	}
+
+	if (er->status & PCAN_USBPRO_BUS_OVERRUN)
+	{
+		dev->wCANStatus |= CAN_ERR_OVERRUN;
 		can_frame.can_id |= CAN_ERR_CRTL;
 		can_frame.data[1] |= CAN_ERR_CRTL_RX_OVERFLOW;
 		dev->dwErrorCounter++;
@@ -1716,7 +1628,7 @@ int pcan_usbpro_handle_canmsg_status_err_rx(struct pcan_usb_interface *usb_if,
 		can_frame.can_dlc = CAN_ERR_DLC;
 	}
 
-	pcan_usbpro_timestamp_decode(usb_if, le32_to_cpu(er->timestamp32), &tv);
+	pcan_usbpro_timestamp_decode(usb_if, er->timestamp32, &tv);
 
 	err = pcan_xxxdev_rx(dev, &can_frame, &tv);
 	if (err >= 0)
@@ -1735,7 +1647,6 @@ static
 int pcan_usbpro_handle_calibration_msg(struct pcan_usb_interface *usb_if,
                                      struct pcan_usbpro_calibration_ts_rx_t *ts)
 {
-	const uint32_t raw_frame_index = le32_to_cpu(ts->timestamp64[0]);
 	uint32_t dev_frame_nb;
 
 #ifdef PCAN_USBPRO_DEBUG_TIMESTAMP
@@ -1743,11 +1654,9 @@ int pcan_usbpro_handle_calibration_msg(struct pcan_usb_interface *usb_if,
 	       ts->timestamp64[1], ts->timestamp64[0]);
 #endif
 
-#if 0
 	DPRINTK(KERN_DEBUG "%s: %s(): "
 	        "ts.timestamp={0x%08x, 0x%08x}\n", 
-	        DEVICE_NAME, __func__, ts->timestamp64[0], ts->timestamp64[1]);
-#endif
+	        DEVICE_NAME, __FUNCTION__, ts->timestamp64[0], ts->timestamp64[1]);
 
 	if (!(usb_if->state & PCAN_USBPRO_WAIT_FOR_CALIBRATION_MSG)) return 0;
 
@@ -1756,14 +1665,14 @@ int pcan_usbpro_handle_calibration_msg(struct pcan_usb_interface *usb_if,
 	pcan_usbpro_handle_response_rtt(usb_if);
 
 #ifndef PCAN_USBPRO_USE_UFRAMES
-	dev_frame_nb = raw_frame_index & PCAN_USBPRO_PRECISION_MASK;
+	dev_frame_nb = ts->timestamp64[0] & PCAN_USBPRO_PRECISION_MASK;
 #else
-   dev_frame_nb = (raw_frame_index & PCAN_USBPRO_PRECISION_MASK) << 3 
-	            | ((raw_frame_index >> 11) & 0x7);
+   dev_frame_nb = (ts->timestamp64[0] & PCAN_USBPRO_PRECISION_MASK) << 3 
+	            | ((ts->timestamp64[0] >> 11) & 0x7);
 #endif
 
 	pcan_usbpro_time_sync(usb_if, &usb_if->tv_response, 
-	                      le32_to_cpu(ts->timestamp64[1]), dev_frame_nb);
+	                      ts->timestamp64[1], dev_frame_nb);
 
 #ifdef PCAN_USBPRO_DRIVER_CALIBRATION_PERIOD
 
@@ -1790,14 +1699,16 @@ int pcan_usbpro_handle_buslast_rx(struct pcan_usb_interface *usb_if,
 {
 	const int ctrl_index = (bl->channel >> 4) & 0x0f;
 	struct pcandev *dev = &usb_if->dev[ctrl_index];
-	uint32_t buslast_val = le16_to_cpu(bl->buslast_val);
+
+	/* Don't send any message when device not opened */
+	if (dev->nOpenPaths <= 0) return 0;
+
+	dev->dwInterruptCounter++;
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d): "
 	        "bl=[buslast_val=0x%04x timestamp=0x%08x]\n", 
-	        DEVICE_NAME, __func__, ctrl_index, 
-	        bl->buslast_val, le32_to_cpu(bl->timestamp32));
-
-	dev->bus_load = (u16 )((100 * buslast_val) / 4096);
+	        DEVICE_NAME, __FUNCTION__, ctrl_index, 
+	        bl->buslast_val, bl->timestamp32);
 
 	return 0;
 }
@@ -1814,24 +1725,19 @@ int pcan_usbpro_msg_decode(struct pcan_usb_interface *usb_if,
 {
 	int err = 0;
 	struct pcan_usbpro_msg_t usb_msg;
-	uint8_t *rec_ptr, *msg_end;
+	uint8_t *rec_ptr;
 	uint16_t rec_count;
 	int d;
 
-	//DPRINTK(KERN_DEBUG "%s: %s(%d)\n", DEVICE_NAME, __func__, msg_len);
+	//DPRINTK(KERN_DEBUG "%s: %s(%d)\n", DEVICE_NAME, __FUNCTION__, msg_len);
 	//dump_mem("received msg", msg_addr, msg_len);
-
-	/* Apply any fragmentation offset to the packet address to seek on */
-	/* the (simulated) record count */
-	msg_addr -= usb_if->frag_rec_offset;
-	msg_len += usb_if->frag_rec_offset;
 
 	/* For USB-PRO, messages MUST be at least 4-bytes length */
 	rec_ptr = pcan_usbpro_msg_init(&usb_msg, msg_addr, msg_len);
 	if (rec_ptr == NULL)
 	{
 		DPRINTK(KERN_DEBUG "%s: %s() invalid message length %d (ignored)\n", 
-		        DEVICE_NAME, __func__, msg_len);
+		        DEVICE_NAME, __FUNCTION__, msg_len);
 		return 0;
 	}
 
@@ -1849,9 +1755,7 @@ int pcan_usbpro_msg_decode(struct pcan_usb_interface *usb_if,
 	}
 
 	/* Loop reading all the records from the incoming message */
-	msg_end = msg_addr + msg_len;
-	for (rec_count=le16_to_cpu(*usb_msg.u.rec_counter_read); rec_count > 0; 
-	                                                                 rec_count--)
+	for (rec_count=*usb_msg.u.rec_counter_read; rec_count > 0; rec_count--)
 	{
 		union pcan_usbpro_rec_t *pr = (union pcan_usbpro_rec_t *)rec_ptr;
 		int sizeof_rec = pcan_usbpro_sizeof_rec(pr->data_type);
@@ -1862,23 +1766,7 @@ int pcan_usbpro_msg_decode(struct pcan_usb_interface *usb_if,
 #endif
 		if (sizeof_rec <= 0)
 		{
-			pr_info("%s: got unsupported record in received message from usb:\n", DEVICE_NAME);
-			dump_mem("message content", msg_addr, msg_len); 
 			err = -ENOTSUPP;
-			break;
-		}
-
-		/* Check if the record goes out of current packet */
-		if (rec_ptr + sizeof_rec > msg_end)
-		{
-			/* Yes, it does: donot handle it here but wait for next loop */
-			/* decoding on the next packet. */
-			/* Uses current packet to simulate message header with the correct */
-			/* record counter */
-			rec_ptr -= 4;
-			*(uint32_t *)rec_ptr = cpu_to_le32(rec_count);
-
-			err = rec_count;
 			break;
 		}
 
@@ -1909,18 +1797,13 @@ int pcan_usbpro_msg_decode(struct pcan_usb_interface *usb_if,
 
 		default:
 			printk(KERN_INFO "%s: %s(): unhandled record type 0x%02x (%d)\n",
-			       DEVICE_NAME, __func__, pr->data_type, pr->data_type);
+			       DEVICE_NAME, __FUNCTION__, pr->data_type, pr->data_type);
 			dump_mem("message content", msg_addr, msg_len); 
 			break;
 		}
 
 		rec_ptr += sizeof_rec;
 	}
-
-	/* Always compute next packet offset to seek on (simulated) record counter*/
-	/* If all records have been processed here, next packet will start with */
-	/* a correct message header */
-	usb_if->frag_rec_offset = (rec_count > 0) ? (msg_end - rec_ptr) : 0;
 
 fail:
 
@@ -1965,7 +1848,7 @@ int pcan_usbpro_msg_encode(struct pcandev *dev,
 
 #if 0
 	DPRINTK(KERN_DEBUG "%s: %s(buffer_size=%d) rec_max_size=%d "
-	        "msg_in_fifo=%d fifo_empty=%d\n", DEVICE_NAME, __func__, 
+	        "msg_in_fifo=%d fifo_empty=%d\n", DEVICE_NAME, __FUNCTION__, 
 	        *buffer_size, rec_max_len,
 	        dev->writeFifo.nStored, pcan_fifo_empty(&dev->writeFifo));
 #endif
@@ -1981,7 +1864,7 @@ int pcan_usbpro_msg_encode(struct pcandev *dev,
 	{
 		DPRINTK(KERN_DEBUG "%s: %s(): not enough room to store %d bytes record "
 		        "into a %d bytes buffer\n",
-		        DEVICE_NAME, __func__, rec_max_len, *buffer_size);
+		        DEVICE_NAME, __FUNCTION__, rec_max_len, *buffer_size);
 
 		*buffer_size = 0;
 		return -EMSGSIZE;
@@ -2004,7 +1887,7 @@ int pcan_usbpro_msg_encode(struct pcandev *dev,
 			{
 				printk(KERN_ERR "%s: %s(): can't get data out of writeFifo, "
 				                "available data: %d, err: %d\n", 
-				       DEVICE_NAME, __func__, dev->writeFifo.nStored, err);
+				       DEVICE_NAME, __FUNCTION__, dev->writeFifo.nStored, err);
 			}
 
 			break;
@@ -2017,7 +1900,7 @@ int pcan_usbpro_msg_encode(struct pcandev *dev,
 #endif
 		{
 			printk(KERN_INFO "%s: %s() CAN msg type %02Xh ignored\n",
-			       DEVICE_NAME, __func__, can_msg.MSGTYPE);
+			       DEVICE_NAME, __FUNCTION__, can_msg.MSGTYPE);
 			continue;
 		}
 
@@ -2074,47 +1957,47 @@ int pcan_usbpro_msg_encode(struct pcandev *dev,
 }
 
 /*
+ * void pcan_usbpro_cleanup(struct pcandev *dev)
+ */
+static 
+void pcan_usbpro_cleanup(struct pcandev *dev)
+{
+#ifdef DEBUG
+	USB_PORT *u = &dev->port.usb;
+
+	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", 
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index);
+#endif
+
+	/* Switch LED off */
+	pcan_usbpro_set_can_led(dev, 4, 0xffffffff); /* orange off */
+}
+
+/*
  * int pcan_usbpro_request(struct pcan_usb_interface *usb_if,
- *                         int req_id, int req_value,
+ *                         int req_type, int req_value,
  *                         void *req_addr, int req_size)
  * Send USB Vendor type request
  */
 static 
 int pcan_usbpro_request(struct pcan_usb_interface *usb_if,
-                        int req_id, int req_value,
+                        int req_type, int req_value,
                         void *req_addr, int req_size)
 {
 	int err;
-	uint8_t req_type;
-	unsigned int p;
 
 	memset(req_addr, '\0', req_size);
 
-	req_type = USB_TYPE_VENDOR | USB_RECIP_OTHER;
-	switch (req_id)
-	{
-	case USB_VENDOR_REQUEST_FKT:
-		/* Host to device */
-		p = usb_sndctrlpipe(usb_if->usb_dev, 0);
-		break;
-
-	case USB_VENDOR_REQUEST_INFO:
-	default:
-		/* Device to host */
-		p = usb_rcvctrlpipe(usb_if->usb_dev, 0);
-		req_type |= USB_DIR_IN;
-	}
-
 	err = usb_control_msg(usb_if->usb_dev, 
-	                      p,
-	                      req_id,
+	                      usb_rcvctrlpipe(usb_if->usb_dev, 0),
 	                      req_type,
+	                      USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_OTHER,
 	                      req_value,
 	                      0, req_addr, req_size,
 	                      2*USB_CTRL_GET_TIMEOUT);
 	if (err < 0)
 		DPRINTK(KERN_INFO "%s: unable to request usb[type=%d value=%d] err=%d\n", 
-		        DEVICE_NAME, req_id, req_value, err);
+		        DEVICE_NAME, req_type, req_value, err);
 
 	else 
 	{
@@ -2125,101 +2008,27 @@ int pcan_usbpro_request(struct pcan_usb_interface *usb_if,
 	return err;
 }
 
-static
-void pcan_usbpro_driver_loaded(struct pcan_usb_interface *usb_if,
-                               int can_lin, int loaded)
-{
-#ifdef USB_VENDOR_REQUEST_wVALUE_SETFKT_INTERFACE_DRIVER_LOADED
-	/* Tell the USB-PRO that the Driver is loaded */
-	uint8_t buffer[16];
-
-	buffer[0] = (uint8_t )can_lin; /* Interface CAN=0 LIN=1 */
-	buffer[1] = loaded ? 1 : 0;    /* Driver loaded 0/1 */
-
-	pcan_usbpro_request(usb_if, 
-	                    USB_VENDOR_REQUEST_FKT, 
-	                    USB_VENDOR_REQUEST_wVALUE_SETFKT_INTERFACE_DRIVER_LOADED,
-	                    &buffer[0], sizeof(buffer));
-#endif
-}
-
-/*
- * void pcan_usbpro_cleanup(struct pcandev *dev)
- *
- * Last chance to submit URB before driver removal.
- */
-static 
-void pcan_usbpro_cleanup(struct pcandev *dev)
-{
-	USB_PORT *u = &dev->port.usb;
-#ifdef DEBUG
-
-	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index);
-#endif
-
-	/* Sometimes, bus off request can't be submit when driver is removed so, */
-	/* when the device was not properly closed. So, move the bus off request */
-	/* here to be sure it is sent. */
-	pcan_usbpro_set_can_off(dev);
-
-#ifdef USB_VENDOR_REQUEST_wVALUE_SETFKT_INTERFACE_DRIVER_LOADED
-	/* No more need to switch off the LEDs by ourselves! */
-	/* Fw does it when we notify it from driver unload! */
-#else
-	/* Switch LED off */
-	pcan_usbpro_set_can_led(dev, 4, 0xffffffff); /* orange off */
-#endif
-
-#ifdef PCAN_USBPRO_GET_BUSLOAD
-	pcan_usbpro_setget_buslast(dev, 0);
-#endif
-
-	/* If last device, tell module that driver is unloaded */
-	if (u->dev_ctrl_index == (u->usb_if->dev_ctrl_count-1))
-	{
-		/* turn off calibration message */
-		pcan_usbpro_calibration_request(u->usb_if, 0);
-
-		/* Tell module the CAN driver is unloaded */
-		pcan_usbpro_driver_loaded(u->usb_if, 0, 0);
-	}
-}
-
 /*
  * int pcan_usbpro_ctrl_init(struct pcandev *dev)
  *
- * Do CAN controller specific initialization.
+ * Do CAN controller specifc initialization.
  */
 static 
 int pcan_usbpro_ctrl_init(struct pcandev *dev)
 {
 	int err;
 	USB_PORT *u = &dev->port.usb;
-	uint32_t device_nr;
 
 	DPRINTK(KERN_DEBUG "%s: %s(CAN#%d)\n", 
-	        DEVICE_NAME, __func__, u->dev_ctrl_index);
-
-#ifdef PCAN_USBPRO_GET_BUSLOAD
-	err = pcan_usbpro_setget_buslast(dev, 1);
-#endif
+	        DEVICE_NAME, __FUNCTION__, u->dev_ctrl_index);
 
 	/* now, seems that may avoid to retry... */
-	/* request now for 1st calibration message (on last ctrlr only) */
-	if (u->dev_ctrl_index == (u->usb_if->dev_ctrl_count-1))
+	/* request now for 1st calibration message (on 1st ctrl only) */
+	if (u->dev_ctrl_index == 0)
 	{
-		/* Tell device the CAN driver is loaded */
-		//pcan_usbpro_driver_loaded(u->usb_if, 0, 1);
-
 		err = pcan_usbpro_calibration_request(u->usb_if, 1);
 		if (err) return err;
 	}
-
-	err = pcan_usbpro_get_device_nr(dev, &device_nr);
-	if (!err)
-		pr_info("%s: PCAN-USB-PRO channel %d device number=0x%x\n", 
-		        DEVICE_NAME, u->dev_ctrl_index+1, device_nr);
 
 	/* set LED in default state (end of init phase) */
 	pcan_usbpro_set_can_led(dev, 0, 1);
@@ -2233,7 +2042,7 @@ int pcan_usbpro_ctrl_init(struct pcandev *dev)
 static
 void pcan_usbpro_free(struct pcan_usb_interface *usb_if)
 {
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __func__);
+	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 #ifdef PCAN_USBPRO_DRIVER_CALIBRATION_PERIOD
 	del_timer_sync(&usb_if->calibration_timer);
@@ -2247,7 +2056,7 @@ void pcan_usbpro_free(struct pcan_usb_interface *usb_if)
  */
 int pcan_usbpro_init(struct pcan_usb_interface *usb_if)
 {
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __func__);
+	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	/* Set PCAN-USB-PRO hardware specific callbacks */
 	usb_if->device_ctrl_init = pcan_usbpro_ctrl_init;
@@ -2310,7 +2119,7 @@ int pcan_usbpro_init(struct pcan_usb_interface *usb_if)
 	}
 #endif
 
-#if 0//def USB_VENDOR_REQUEST_wVALUE_INFO_DEVICENR
+#ifdef USB_VENDOR_REQUEST_wVALUE_INFO_DEVICENR
 	/* Device Number */
 	{
 		struct pcan_usbpro_device_nr_t dnr;
@@ -2360,7 +2169,7 @@ int pcan_usbpro_init(struct pcan_usb_interface *usb_if)
 	}
 #endif
 
-#if 0//def USB_VENDOR_REQUEST_wVALUE_INFO_TIMEMODE
+#ifdef USB_VENDOR_REQUEST_wVALUE_INFO_TIMEMODE
 	/* Time Mode */
 	{
 		struct pcan_usbpro_time_mode_t tm;
@@ -2408,13 +2217,10 @@ int pcan_usbpro_init(struct pcan_usb_interface *usb_if)
 	setup_timer(&usb_if->calibration_timer,
 	            pcan_usbpro_calibration_timeout, (unsigned long)usb_if);
 #else
-	/* request for hardware periodic calibration messages is done now when */
-	/* last controller is initialized */
-	//pcan_usbpro_calibration_request_async(usb_if, 1);
+	/* request for hardware periodic calibration messages */
+	pcan_usbpro_calibration_request_async(usb_if, 1);
 #endif
-
-	/* Tell module the CAN driver is loaded */
-	pcan_usbpro_driver_loaded(usb_if, 0, 1);
 
 	return 0;
 }
+

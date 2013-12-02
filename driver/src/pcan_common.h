@@ -50,7 +50,6 @@
 
 #include <linux/version.h>  // if this file is not found: please look @ /boot/vmlinuz.version.h and make a symlink
 
-#include <linux/module.h>
 #include <linux/stringify.h>
 
 // support for MODVERSIONS
@@ -203,9 +202,9 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous
 // with SVN
-#define CURRENT_RELEASE "Release_20130814_n"  // $name$
+#define CURRENT_RELEASE "Release_20110728_n"  // $name$
 #define PCAN_VERSION_MAJOR             7
-#define PCAN_VERSION_MINOR             9
+#define PCAN_VERSION_MINOR             3
 #define PCAN_VERSION_SUBMINOR          0
 #define CURRENT_VERSIONSTRING          __stringify(PCAN_VERSION_MAJOR)"."__stringify(PCAN_VERSION_MINOR)"."__stringify(PCAN_VERSION_SUBMINOR)
 

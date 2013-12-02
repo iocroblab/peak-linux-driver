@@ -240,7 +240,7 @@ int pcan_ioctl_extended_status(struct pcandev *dev, TPEXTENDEDSTATUS *status)
 
   DPRINTK(KERN_DEBUG "%s: pcan_ioctl(PCAN_GET_EXT_STATUS)\n", DEVICE_NAME);
 
-  pcan_ioctl_extended_status_common(dev, &local);
+  local = pcan_ioctl_extended_status_common(dev);
 
   if (copy_to_user(status, &local, sizeof(local)))
   {
@@ -264,7 +264,7 @@ static int pcan_ioctl_status(struct pcandev *dev, TPSTATUS *status)
 
   DPRINTK(KERN_DEBUG "%s: pcan_ioctl(PCAN_GET_STATUS)\n", DEVICE_NAME);
 
-  pcan_ioctl_status_common(dev, &local);
+  local = pcan_ioctl_status_common(dev);
 
   if (copy_to_user(status, &local, sizeof(local)))
   {
@@ -288,7 +288,7 @@ static int pcan_ioctl_diag(struct pcandev *dev, TPDIAG *diag)
 
   DPRINTK(KERN_DEBUG "%s: pcan_ioctl(PCAN_DIAG)\n", DEVICE_NAME);
 
-  pcan_ioctl_diag_common(dev, &local);
+  local = pcan_ioctl_diag_common(dev);
 
   if (copy_to_user(diag, &local, sizeof(local)))
     err = -EFAULT;
@@ -588,9 +588,9 @@ static ssize_t pcan_write(struct file *filep, const char *buf, size_t count, lof
 
       if ((amount > WRITEBUFFER_SIZE) || (offset > WRITEBUFFER_SIZE))
       {
-#ifdef __LP64__
-#warning "Compiling for __LP64__"
-#endif
+        #ifdef __LP64__
+        #warning "Compiling for __LP64__"
+        #endif
         printk(KERN_ERR "%s: fault in pcan_write() %zu %u, %u: \n", DEVICE_NAME, count, amount, offset);
         return -EFAULT;
       }

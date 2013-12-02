@@ -72,7 +72,6 @@ ifeq ($(HOSTTYPE),x86_64)
 else
   LIBPATH = /usr/lib
 endif
-INCPATH = /usr/include
 
 LDNAME  = libpcan.so
 SONAME  = $(LDNAME).0
@@ -94,23 +93,14 @@ $(TARGET) : $(FILES)
 clean:
 	rm -f $(SRC)/*~ $(SRC)/*.o *~ *.so.*
 
-#********** these entries are reserved for root access only *******************
+#********** this entry is reserved for root access only *********************
 install:
-	mkdir -p $(DESTDIR)$(LIBPATH)
-	cp $(TARGET) $(DESTDIR)$(LIBPATH)/$(TARGET)
-	ln -sf $(DESTDIR)$(LIBPATH)/$(TARGET) $(DESTDIR)$(LIBPATH)/$(SONAME)
-	ln -sf $(DESTDIR)$(LIBPATH)/$(SONAME) $(DESTDIR)$(LIBPATH)/$(LDNAME)
-	mkdir -p $(DESTDIR)$(INCPATH)
-	cp libpcan.h $(DESTDIR)$(INCPATH)/libpcan.h
-	chmod 644 $(DESTDIR)$(INCPATH)/libpcan.h
-ifeq ($(DESTDIR),)
+	cp $(TARGET) $(LIBPATH)/$(TARGET)
+	ln -sf $(LIBPATH)/$(TARGET) $(LIBPATH)/$(SONAME)
+	ln -sf $(LIBPATH)/$(SONAME) $(LIBPATH)/$(LDNAME)
+	cp libpcan.h /usr/include/libpcan.h
+	chmod 644 /usr/include/libpcan.h
 	/sbin/ldconfig
-endif
+  
+  
 
-uninstall:
-	@-rm -f $(DESTDIR)$(LIBPATH)/$(TARGET)
-	@-rm -f $(DESTDIR)$(LIBPATH)/$(SONAME) $(DESTDIR)$(LIBPATH)/$(LDNAME)
-	@-rm -f $(DESTDIR)$(INCPATH)/libpcan.h
-ifeq ($(DESTDIR),)
-	/sbin/ldconfig
-endif

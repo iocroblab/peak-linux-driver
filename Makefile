@@ -63,10 +63,6 @@ define make-install
 @cd driver; make install; cd ../lib; make install; cd ../test; make install; cd ..
 endef
 
-define make-uninstall
-@cd driver; make uninstall; cd ../lib; make uninstall; cd ../test; make uninstall; cd ..
-endef
-
 define make-rpminstall
 @cd driver; make rpminstall; cd ../lib; make rpminstall; cd ../test; make rpminstall; cd ..
 endef
@@ -82,10 +78,7 @@ clean:
 
 install:
 	$(make-install)
- 
-uninstall:
-	$(make-uninstall)
-
+  
 # end
 
 

@@ -115,7 +115,7 @@ int write_loop(__u32 dwMaxTimeInterval, __u32 dwMaxLoop)
       if ((nExtended == CAN_INIT_TYPE_EX) || !(iter->MSGTYPE & MSGTYPE_EXTENDED))
       {
         // send the message
-        if (CAN_Write(h, &(*iter)))
+        if ((errno = CAN_Write(h, &(*iter))))
         {
           perror("transmitest: CAN_Write()");
           return errno;

@@ -33,15 +33,11 @@
 // Project homepage http://developer.berlios.de/projects/socketcan
 //
 //****************************************************************************
-//#define DEBUG
-//#undef DEBUG
 
 #include <src/pcan_common.h>
 #include <linux/sched.h>
+#include <linux/module.h>
 #include <linux/skbuff.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
-#include <linux/can/skb.h>
-#endif
 #include <src/pcan_main.h>
 #include <src/pcan_fops.h>  /* pcan_open_path(), pcan_release_path() */
 #include <src/pcan_fifo.h>
@@ -58,7 +54,7 @@
 //----------------------------------------------------------------------------
 static int pcan_netdev_open(struct net_device *dev)
 {
-  struct pcan_priv *priv = netdev_priv(dev);
+  struct can_priv *priv = netdev_priv(dev);
   struct pcandev  *pdev = priv->pdev;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, dev->name);
@@ -77,7 +73,7 @@ static int pcan_netdev_open(struct net_device *dev)
 //----------------------------------------------------------------------------
 static int pcan_netdev_close(struct net_device *dev)
 {
-  struct pcan_priv *priv = netdev_priv(dev);
+  struct can_priv *priv = netdev_priv(dev);
   struct pcandev  *pdev = priv->pdev;
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, dev->name);
@@ -96,7 +92,7 @@ static int pcan_netdev_close(struct net_device *dev)
 struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23)
-  struct pcan_priv *priv = netdev_priv(dev);
+  struct can_priv *priv = netdev_priv(dev);
 
   /* TODO: read statistics from chip */
   return &priv->stats;
@@ -111,7 +107,7 @@ struct net_device_stats *pcan_netdev_get_stats(struct net_device *dev)
 //----------------------------------------------------------------------------
 static int pcan_netdev_tx(struct sk_buff *skb, struct net_device *dev)
 {
-  struct pcan_priv *priv = netdev_priv(dev);
+  struct can_priv *priv = netdev_priv(dev);
   struct pcandev  *pdev = priv->pdev;
   struct net_device_stats *stats = pcan_netdev_get_stats(dev);
   struct can_frame *cf = (struct can_frame*)skb->data;
@@ -198,11 +194,6 @@ int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv
   skb->protocol = htons(ETH_P_CAN);
   skb->pkt_type = PACKET_BROADCAST;
   skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
-  can_skb_reserve(skb);
-  can_skb_prv(skb)->ifindex = ndev->ifindex;
-#endif
 
   #if 0
   /*
@@ -291,8 +282,6 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
   extern char *assign; /* module param: assignment for netdevice names */
   int minor = pdev->nMinor;
 
-	DPRINTK(KERN_DEBUG "%s: %s(): minor=%d major=%d (usb major=%d) assign=\"%s\"\n", DEVICE_NAME, __FUNCTION__, minor, pdev->nMajor, USB_MAJOR, assign);
-
   if (!assign) /* auto assignment */
     return;
 
@@ -306,7 +295,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
   if (!strncmp(assign, "peak", 4)) {
 
     // assign=peak
-    snprintf(name, IFNAMSIZ-1, CAN_NETDEV_NAME, minor); /* easy: /dev/pcanXX -> canXX */
+    snprintf(name, IFNAMSIZ-1, "can%d", minor); /* easy: /dev/pcanXX -> canXX */
 
   } else {
 
@@ -326,7 +315,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
       }
 
       if (peaknum == minor) {
-        snprintf(name, IFNAMSIZ-1, CAN_NETDEV_NAME, netnum);
+        snprintf(name, IFNAMSIZ-1, "can%d", netnum);
         break; /* done */
       }
       ptr++; /* search for next 'p' */
@@ -353,7 +342,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
 int pcan_netdev_register(struct pcandev *pdev)
 {
   struct net_device *ndev;
-  struct pcan_priv *priv;
+  struct can_priv *priv;
   char name[IFNAMSIZ] = {0};
 
   pcan_netdev_create_name(name, pdev);
@@ -363,7 +352,7 @@ int pcan_netdev_register(struct pcandev *pdev)
 
 #ifdef LINUX_26
 
-  ndev = alloc_netdev(sizeof(struct pcan_priv), name, pcan_netdev_init);
+  ndev = alloc_netdev(sizeof(struct can_priv), name, pcan_netdev_init);
 
   if (!ndev) {
     printk(KERN_ERR "%s: out of memory\n", DEVICE_NAME);
@@ -388,7 +377,7 @@ int pcan_netdev_register(struct pcandev *pdev)
 
   memset(ndev, 0, sizeof(struct net_device));
 
-  priv = (struct pcan_priv*)kmalloc(sizeof(struct pcan_priv), GFP_KERNEL);
+  priv = (struct can_priv*)kmalloc(sizeof(struct can_priv), GFP_KERNEL);
 
   if (!priv) {
     printk(KERN_ERR "%s: out of memory\n", DEVICE_NAME);
@@ -396,7 +385,7 @@ int pcan_netdev_register(struct pcandev *pdev)
     return 1;
   }
 
-  memset(priv, 0, sizeof(struct pcan_priv));
+  memset(priv, 0, sizeof(struct can_priv));
   ndev->priv = priv;
 
   /* fill net_device structure */
@@ -418,7 +407,7 @@ int pcan_netdev_register(struct pcandev *pdev)
   priv->pdev   = pdev;
   pdev->netdev = ndev;
 
-  printk(KERN_INFO "%s: registered netdevice %s for %s hw (major,minor %d,%d)\n",
+  printk(KERN_INFO "%s: registered netdevice %s for pcan %s hw (major,minor %d,%d)\n",
          DEVICE_NAME, ndev->name, pdev->type, pdev->nMajor, pdev->nMinor);
 
   return 0;
@@ -430,7 +419,7 @@ int pcan_netdev_register(struct pcandev *pdev)
 int pcan_netdev_unregister(struct pcandev *pdev)
 {
   struct net_device *ndev = pdev->netdev;
-  struct pcan_priv *priv;
+  struct can_priv *priv;
 
   if (!ndev)
     return 1;
