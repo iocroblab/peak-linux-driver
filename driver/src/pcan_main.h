@@ -204,7 +204,7 @@ typedef struct
 	u8         VCCenable;                                    // reflection of VCCEN
 	u8         PCA9553_LS0Shadow;                            // Shadow register to hold the state of the LEDs
 	int        run_activity_timer_cyclic;                    // a flag to synchronize stop conditions
-	struct     timer_list activity_timer;                    // to scan for activity, set the time
+	struct     delayed_work activity_timer;                  // to scan for activity, set the time
 } PCAN_PCIEC_CARD;
 #endif
 
@@ -373,6 +373,7 @@ typedef struct pcandev
 	wait_queue_head_t read_queue;                            // read process wait queue anchor
 	wait_queue_head_t write_queue;                           // write process wait queue anchor
 
+	u16  bus_load;
 	u8   bExtended;                                          // if 0, no extended frames are accepted
 	int  nLastError;                                         // last error written
 	int  busStatus;                                          // follows error status of CAN-Bus
@@ -461,6 +462,8 @@ struct pcan_usb_interface
 
 	struct timer_list calibration_timer;
 
+	int    frag_rec_offset;
+
 	int    dev_ctrl_count;                           // number of CAN ctrlrs
 	struct pcandev dev[1];                           // the real devices for each
                                                     // CAN controller
@@ -509,6 +512,7 @@ typedef struct driverobj
 	u16 wInitStep;                                           // driver specific init state
 	struct timeval sInitTime;                                // time in usec when init was called
 	struct list_head devices;                                // base of list of devices
+	struct mutex devices_lock;	/* mutex to access devices list */
 	u8  *szVersionString;                                    // pointer to the driver version string
 
 #ifdef PCCARD_SUPPORT
@@ -560,8 +564,12 @@ u32  get_mtime(void);                                           // request time 
 void get_relative_time(struct timeval *tv, struct timeval *tr); // request time from drivers start
 void timeval2pcan(struct timeval *tv, u32 *msecs, u16 *usecs);  // convert to pcan time
 
+void pcan_add_device_in_list(struct pcandev *dev);
+void pcan_del_device_from_list(struct pcandev *dev);
+
 void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType);
 void buffer_dump(u8 *pucBuffer, u16 wLineCount);
+void dump_mem(char *prompt, void *p, int l);
 void frame2msg(struct can_frame *cf, TPCANMsg *msg);
 void msg2frame(struct can_frame *cf, TPCANMsg *msg);
 int  pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv);

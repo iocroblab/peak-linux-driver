@@ -59,9 +59,9 @@ void pcan_release_path(struct pcandev *dev);
 #endif
 struct pcandev* pcan_search_dev(int major, int minor);
 
-TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev);
-TPSTATUS pcan_ioctl_status_common(struct pcandev *dev);
-TPDIAG pcan_ioctl_diag_common(struct pcandev *dev);
+int pcan_ioctl_extended_status_common(struct pcandev *dev, TPEXTENDEDSTATUS *pes);
+int pcan_ioctl_status_common(struct pcandev *dev, TPSTATUS *ps);
+int pcan_ioctl_diag_common(struct pcandev *dev, TPDIAG *pd);
 
 //****************************************************************************
 // GLOBALS

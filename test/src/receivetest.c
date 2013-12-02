@@ -125,7 +125,7 @@ int read_loop(bool display_on)
     TPCANRdMsg m;
     __u32 status;
     
-    if ((errno = LINUX_CAN_Read(h, &m))) 
+    if (LINUX_CAN_Read(h, &m)) 
     {
       perror("receivetest: LINUX_CAN_Read()");
       return errno;

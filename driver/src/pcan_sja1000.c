@@ -948,6 +948,12 @@ int  sja1000_probe(struct pcandev *dev)
 	//wmb();
 	DPRINTK(KERN_DEBUG "%s: Hopefully switched to PeliCAN mode\n", DEVICE_NAME);
 
+	/*
+	 * new 7.5: PELICAN mode takes sometimes longer: adding some delay
+	 * solves the problem (many thanks to Hardi Stengelin)
+	 */
+	udelay(10);  // Wait until the pelican mode is activ
+
 	tmp = dev->readreg(dev, CHIPSTATUS);
 	DPRINTK(KERN_DEBUG "%s: CHIPSTATUS traced (0x%02x)\n", DEVICE_NAME, tmp);
 	if ((tmp & 0x30) != 0x30)

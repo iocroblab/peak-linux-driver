@@ -88,28 +88,41 @@ HEADER_PATH := $(shell if test -d $(KERNEL_LOCATION)/include/generated ; \
 # whole makefile is based on availability of version.h file
 # do a forced stop if it is not available
 #
-HASVERSION_H := $(shell if test -f $(KERNEL_LOCATION)/include/linux/version.h ; then echo yes ; else echo no; fi )
+# >= 3.7: linux/version.h no more in include but in include/generated/uapi
+#
+VERSION_H_DIR := $(shell if test -d $(HEADER_PATH)/uapi ;    \
+                   then echo "$(HEADER_PATH)/uapi";          \
+                   else echo "$(KERNEL_LOCATION)/include"; fi)
+
+HASVERSION_H := $(shell if test -f $(VERSION_H_DIR)/linux/version.h ; \
+                  then echo yes ; \
+                  else echo no; fi )
 
 ifeq ($(HASVERSION_H),no)
-$(error "Can't find $(KERNEL_LOCATION)/include/linux/version.h !")
+$(error "Can't find $(VERSION_H_DIR)/linux/version.h")
 else
 
 #****************************************************************************
 # removed old version retrival for better cross compile support
 # old VERSION := $(shell uname -r)
 #
-VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include $(KERNEL_LOCATION)/include/linux/version.h \
-            | grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
+VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include \
+                              $(VERSION_H_DIR)/linux/version.h | \
+                              grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
 
 ifeq ($(VERSION),)
-VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include $(HEADER_PATH)/utsrelease.h \
-            | grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
+VERSION := $(shell cpp -E -dM -I$(KERNEL_LOCATION)/include \
+                              $(HEADER_PATH)/utsrelease.h | \
+                              grep UTS_RELEASE | sed -e 's;[^"]*"\(.*\)";\1;g')
+ifeq ($(VERSION),)
+$(error "Unable to read version string from $(KERNEL_LOCATION)")
+endif
 endif
 
 #****************************************************************************
 # where the driver should be installed - change here for cross install
 #
-INSTALL_LOCATION = /lib/modules/$(VERSION)/misc
+INSTALL_LOCATION = $(DESTDIR)/lib/modules/$(VERSION)/misc
 
 #****************************************************************************
 # get extracted kernel VERSION and PATCHLEVEL for comparison
@@ -117,6 +130,8 @@ INSTALL_LOCATION = /lib/modules/$(VERSION)/misc
 KVERSION    := $(shell echo $(VERSION) | sed -e 's;\([1-9]\)\..*;\1;g' )
 KPATCHLEVEL := $(shell echo $(VERSION) | sed -e 's;[1-9]\.\([0-9]\{0,3\}\)\..*;\1;g' )
 SUBLEVEL    := $(shell echo $(VERSION) | sed -e 's;[1-9]\.[0-9]\{0,3\}\.\([0-9]\{0,3\}\).*;\1;g' )
+
+KVERNUM := $(shell echo $$(($(KVERSION)*10000+$(KPATCHLEVEL)*100+$(SUBLEVEL))))
 
 #****************************************************************************
 # decide to use KBUILD for 2.6.x and 3.x.x kernels
@@ -175,7 +190,7 @@ endif
 #****************************************************************************
 # Test current system for UDEV support influence only for installation
 #
-UDEV   := $(shell if test -d /etc/udev/rules.d ; then echo yes ; else echo no; fi )
+UDEV   := $(shell if test -d $(DESTDIR)/etc/udev/rules.d ; then echo yes ; else echo no; fi )
 
 ifeq ($(RT), XENOMAI)
 #****************************************************************************
@@ -280,7 +295,7 @@ ifeq ($(USEKBUILD),yes) # <<<<< USEKBUILD >>>>>>
 #****************************************************************************
 # for local installation only: sometimes /etc/modprobe.conf.local is used
 #
-MODCONF := $(shell if test -d /etc/modprobe.d ; then echo "/etc/modprobe.d/pcan.conf" ; else echo "/etc/modules.conf.local" ; fi )
+MODCONF := $(shell if test -d "$(DESTDIR)/etc/modprobe.d" ; then echo "$(DESTDIR)/etc/modprobe.d/pcan.conf" ; else echo "$(DESTDIR)/etc/modules.conf.local" ; fi)
 ifeq ($(UDEV), yes)
 MODINST  = "install pcan /sbin/modprobe --ignore-install pcan"
 else
@@ -330,7 +345,7 @@ DEP     = .depend
 #****************************************************************************
 # for local installation only: sometimes /etc/modules.conf.local is used
 #
-MODCONF = "/etc/modules.conf"
+MODCONF = "$(DESTDIR)/etc/modules.conf"
 MODINST = "post-install pcan /usr/local/bin/pcan_make_devices 2"
 
 #****************************************************************************
@@ -341,7 +356,7 @@ TARGET = pcan.o
 #****************************************************************************
 # compile flags
 #
-CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC)-D$(NET) -D$(RT) $(RT_CFLAGS)
+CFLAGS  = -O2 -D__KERNEL__ -DMODULE -Wall -I$(INC) -I. -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it
@@ -381,17 +396,23 @@ endif # <<<<< USEKBUILD >>>>>>
 #********** this entry is reserved for root access only *********************
 compat:
 	@if [ -f /etc/modprobe.d/pcan ] ; then \
-	mv /etc/modprobe.d/pcan /etc/modprobe.d/pcan.conf ; \
-	echo "Info: Moved /etc/modprobe.d/pcan to /etc/modprobe.d/pcan.conf for compatibility reason."; \
+		mv /etc/modprobe.d/pcan /etc/modprobe.d/pcan.conf ; \
+		echo "Info: Moved /etc/modprobe.d/pcan to /etc/modprobe.d/pcan.conf for compatibility reason."; \
 	fi
 
 install: compat
-	@if test -d $(INSTALL_LOCATION) ; then echo "Info: $(INSTALL_LOCATION) exists."; else mkdir $(INSTALL_LOCATION); fi
+	@if test -d $(INSTALL_LOCATION); then\
+		echo "Info: $(INSTALL_LOCATION) exists.";\
+	else\
+		mkdir -p $(INSTALL_LOCATION);\
+	fi
+	@mkdir -p $(DESTDIR)/usr/local/bin
 	@cp -f $(TARGET) $(INSTALL_LOCATION)/$(TARGET)
-	@cp -f pcan_make_devices /usr/local/bin
-	@chmod 744 /usr/local/bin/pcan_make_devices
+	@cp -f pcan_make_devices $(DESTDIR)/usr/local/bin
+	@chmod 744 $(DESTDIR)/usr/local/bin/pcan_make_devices
 	@if [ ! -f $(MODCONF) ] || test -z $(shell grep -ls pcan $(MODCONF)) ; then\
-		cp $(MODCONF) $(MODCONF)~ 2> /dev/NULL;\
+		mkdir -p $(shell dirname $(MODCONF));\
+		cp $(MODCONF) $(MODCONF)~ 2> /dev/null;\
 		echo ""                                               >> $(MODCONF);\
 		echo "# pcan - automatic made entry, begin --------"  >> $(MODCONF);\
 		echo "# if required add options and remove comment "  >> $(MODCONF);\
@@ -402,17 +423,56 @@ install: compat
 	else\
 		echo "Info: Left current 'pcan'-entry in $(MODCONF) untouched.";\
 	fi
+# can't rmmod peak_pci for kernel versions < 3.4 (crash)
 	@if [ $(UDEV) = "yes" ]; then\
-		cp -f udev/pcan_usb_minor_check.bash /usr/local/bin;\
-		chmod 744 /usr/local/bin/pcan_usb_minor_check.bash;\
-		cp -f udev/45-pcan.rules /etc/udev/rules.d ; /sbin/udevadm control --reload-rules; \
-		echo "Info: Copied 45-pcan.rules to /etc/udev/rules.d.";\
-	else\
+		mkdir -p $(DESTDIR)/usr/local/bin;\
+		cp -f udev/pcan_usb_minor_check.bash $(DESTDIR)/usr/local/bin;\
+		chmod 744 $(DESTDIR)/usr/local/bin/pcan_usb_minor_check.bash;\
+		cp -f udev/45-pcan.rules $(DESTDIR)/etc/udev/rules.d;\
+		echo "Info: Copied 45-pcan.rules to $(DESTDIR)/etc/udev/rules.d.";\
+		peak_pci=0;\
+		kvernum=$$(($(KVERSION)*10000+$(KPATCHLEVEL)*100+$(SUBLEVEL)));\
+		for m in $(shell awk '/^blacklist/ { print $$2 }' udev/blacklist-peak.conf); do \
+			if [ $$m = "peak_pci" ] && [ $$kvernum -lt 30400 ]; then\
+				peak_pci=`lsmod | grep -ce peak_pci`;\
+			else\
+				rmmod $$m 2> /dev/null;\
+			fi\
+		done;\
+		cp -f udev/blacklist-peak.conf $(shell dirname $(MODCONF));\
+		chmod 644 $(shell dirname $(MODCONF))/blacklist-peak.conf;\
+		echo "Info: mainline drivers removed and blacklisted in";\
+		echo "      $(shell dirname $(MODCONF))/blacklist-peak.conf";\
+		if [ $$peak_pci -ne 0 ]; then\
+			echo "Info: peak_pci can't be removed from the Kernel";\
+			echo "      You should reboot to complete the installation.";\
+	 	fi\
+	 else\
 		echo "Info: No UDEV installation found.";\
-	fi
+	 fi
+	@mkdir -p $(DESTDIR)/usr/include
+	@cp -f pcan.h $(DESTDIR)/usr/include/pcan.h
+	@chmod 644 $(DESTDIR)/usr/include/pcan.h
+ifeq ($(DESTDIR),)
+	@if [ $(UDEV) = "yes" ]; then\
+		/sbin/udevadm control --reload-rules; \
+	 fi
 	@/sbin/depmod
-	@cp -f pcan.h /usr/include/pcan.h
-	@chmod 644 /usr/include/pcan.h
+endif
+
+.PHONY : uninstall
+uninstall:
+	@-rmmod pcan 2> /dev/null
+	@rm -f $(INSTALL_LOCATION)/$(TARGET)
+	@rm -f $(DESTDIR)/usr/include/pcan.h
+	@rm -f $(DESTDIR)/usr/local/bin/pcan_make_devices
+	@rm -f $(DESTDIR)/etc/udev/rules.d/45-pcan.rules
+	@rm -f $(DESTDIR)/usr/local/bin/pcan_usb_minor_check.bash
+	@rm -f $(shell dirname $(MODCONF))/blacklist-peak.conf
+	@rm -f $(MODCONF)
+ifeq ($(DESTDIR),)
+	@/sbin/depmod
+endif
 
 #********** informations during build of driver *****************************
 .PHONY : message
