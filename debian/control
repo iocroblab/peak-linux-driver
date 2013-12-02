@@ -2,8 +2,8 @@ Source: peak-linux-driver
 Section: net
 Priority: extra
 Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
-Build-Depends: debhelper (>= 7.0.50~), bzip2
-Standards-Version: 3.9.1
+Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms
+Standards-Version: 3.9.3
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
 Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
@@ -14,13 +14,24 @@ Depends: ${misc:Depends}
 Description: PEAK-System CAN utils
  This package provides the tools pcan_make_devices and wstress from PEAK-System.
 
-Package: peak-linux-driver-source
+Package: libpcan0
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: PEAK-System CAN library
+ This package provides the shared library libpcan.so
+
+
+Package: libpcan-dev
+Section: libdevel
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libpcan0 (=${binary:Version})
+Description: PEAK-System CAN library
+ This package contains the development headers.
+
+Package: peak-linux-driver-dkms
 Architecture: all
-Depends: module-assistant, debhelper (>= 7), make, bzip2, ${misc:Depends}
-Description: Source for the peak-linux-driver kernel modules
- This package provides the driver source code for CAN-bus interface 
- products from PEAK-System. These allow communication with the 
- Controller Area Network through standard PC-buses, such as USB, PCI etc.
- .
- You will need make-kpkg from kernel-package to be able to
- compile modules usable with a Debian kernel.
+Depends: dkms, ${misc:Depends},linux-headers-generic | linux-headers
+Description: PEAK-System CAN library
+ This package contains the kernel source and DKMS hooks for module compilation
+ as well as the udev rule file.

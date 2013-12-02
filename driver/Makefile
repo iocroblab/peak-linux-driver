@@ -162,7 +162,7 @@ VERBOSE = 0
 
 SRC     = src
 TEMP    = /tmp
-PWD     = $(shell pwd)          # called from inside IDEs it differs from the used working directory
+PWD     = $(shell pwd)       # called from inside IDEs it differs from the used working directory
 
 PARMS   = type=isa,sp        # only for installer: please modify the install parameters according to your configuration
 

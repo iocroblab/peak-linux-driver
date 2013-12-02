@@ -1,0 +1,22 @@
+obj-m := pcan.o
+pcan-y := src/pcan_main.o src/pcan_fops.o src/pcan_fifo.o src/pcan_filter.o
+pcan-y += src/pcan_parse.o src/pcan_sja1000.o src/pcan_common.o
+
+pcan-y += src/pcan_pci.o 
+pcan-y += src/pcan_pciec.o 
+pcan-y += src/pcan_isa.o 
+pcan-y += src/pcan_dongle.o
+pcan-y += src/pcan_pccard_kernel.o src/pcan_pccard.o
+pcan-y += src/pcan_usb_core.o src/pcan_usb.o src/pcan_usbpro.o src/pcan_timing.o
+
+#pcan-y += gpcan_netdev.o
+
+ccflags-y := -I$(PWD) -DNO_DEBUG -DMODVERSIONS -DPARPORT_SUBSYSTEM -DUSB_SUPPORT -DPCI_SUPPORT -DPCIEC_SUPPORT -DISA_SUPPORT -DDONGLE_SUPPORT -DPCCARD_SUPPORT -DNO -DNO_RT
+
+KVERSION := $(shell uname -r)
+
+all:
+	        $(MAKE) -C /lib/modules/$(KVERSION)/build M=$(PWD) modules
+
+clean:
+	        $(MAKE) -C /lib/modules/$(KVERSION)/build M=$(PWD) clean

@@ -1,3 +1,23 @@
+peak-linux-driver (7.9-1) UNRELEASED; urgency=low
+
+  * Non-maintainer upload.
+  * New upstream version.
+
+ -- Leopold Palomo-Avellaneda <leo@alaxarxa.net>  Mon, 02 Dec 2013 12:00:22 +0100
+
+peak-linux-driver (7.7-1~mweyland~ppa2) precise; urgency=low
+
+  * Adding pcan.h to -dev package. 
+
+ -- Mathias Weyland <mathias@weyland.ch>  Thu, 31 Jan 2013 19:49:21 +0100
+
+peak-linux-driver (7.7-1~mweyland~ppa1) precise; urgency=low
+
+  * Updated to upstream version 7.7.
+  * Now using DKMS
+
+ -- Mathias Weyland <mathias@weyland.ch>  Thu, 31 Jan 2013 16:45:03 +0100
+
 peak-linux-driver (7.3-1) unstable; urgency=low
 
   * Updated to upstream version 7.3.

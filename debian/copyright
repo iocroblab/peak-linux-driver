@@ -1,13 +1,16 @@
 This work was packaged for Debian by:
 
-    Markus Becker <mab@comnets.uni-bremen.de> on Fri, 08 Oct 2010 09:17:33 +0200
+    Mathias Weyland <mathias@weyland.ch> on Thu Jan 31 16:42:19 CET 2013
 
-It was downloaded from:
+The package is based on work by Markus Becker <mab@comnets.uni-bremen.de>,
+downloaded from git://anonscm.debian.org/collab-maint/peak-linux-driver.git
+
+The original tarball was downloaded from:
 
     <http://www.peak-system.com/fileadmin/media/linux/index.htm#download>
 
 Files: *
-Upstream Author(s):
+Upstream Authors:
     Klaus Hitschler <klaus.hitschler@gmx.de>
     Edouard Tisserant <edouard.tisserant@lolitech.fr>
     Laurent Bessard <laurent.bessard@lolitech.fr>
@@ -17,7 +20,7 @@ License: GPL-2
     See /usr/share/common-licenses/GPL-2
 
 Files: driver/src/can.h, driver/src/error.h 
-Upstream Author(s):
+Upstream Authors:
     Oliver Hartkopp <oliver.hartkopp@volkswagen.de>
     Urs Thuermann   <urs.thuermann@volkswagen.de>
 Copyright:
@@ -31,7 +34,8 @@ License: GPL-2
 
 The Debian packaging is:
 
-    Copyright (C) 2010 Markus Becker <mab@comnets.uni-bremen.de>
+    Copyright (C) 2013 Mathias Weyland <mathias@weyland.ch>
+                  2010 Markus Becker <mab@comnets.uni-bremen.de>
                   2007-2008 Teemu Ikonen <tpikonen@gmail.com>
 License: GPL-2
     See /usr/share/common-licenses/GPL-2

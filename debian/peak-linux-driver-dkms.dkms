@@ -1,0 +1,7 @@
+PACKAGE_NAME="peak-linux-driver"
+PACKAGE_VERSION="7.7"
+CLEAN="make clean"
+MAKE[0]="make all KVERSION=$kernelver"
+BUILT_MODULE_NAME[0]="pcan"
+DEST_MODULE_LOCATION[0]="/updates"
+AUTOINSTALL="yes"
