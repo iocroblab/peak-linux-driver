@@ -31,7 +31,7 @@
 //
 // system dependend parts to handle pcan-pccard
 //
-// $Id: pcan_pccard.c 550M 2010-10-19 11:13:30Z (lokal) $
+// $Id: pcan_pccard.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

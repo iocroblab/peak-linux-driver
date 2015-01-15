@@ -31,7 +31,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 628 2010-08-12 19:59:31Z khitschler $
+// $Id: pcan_pccard_kernel.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

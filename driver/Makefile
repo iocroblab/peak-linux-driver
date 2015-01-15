@@ -12,7 +12,7 @@
 #
 # Makefile for Peak CAN interface drivers (ISA, PC/104, PCI, DONGLE, USB, PCCARD)
 #
-# $Id: Makefile 636 2010-10-24 20:45:55Z khitschler $
+# $Id: Makefile 807 2014-12-09 15:34:11Z stephane $
 #
 #****************************************************************************
 
@@ -127,11 +127,23 @@ INSTALL_LOCATION = $(DESTDIR)/lib/modules/$(VERSION)/misc
 #****************************************************************************
 # get extracted kernel VERSION and PATCHLEVEL for comparison
 #
-KVERSION    := $(shell echo $(VERSION) | sed -e 's;\([1-9]\)\..*;\1;g' )
-KPATCHLEVEL := $(shell echo $(VERSION) | sed -e 's;[1-9]\.\([0-9]\{0,3\}\)\..*;\1;g' )
-SUBLEVEL    := $(shell echo $(VERSION) | sed -e 's;[1-9]\.[0-9]\{0,3\}\.\([0-9]\{0,3\}\).*;\1;g' )
+# VERSION = x.y[.z][-name]
+#
+# Examples:
+# VERSION = 1.2
+# VERSION = 1.02
+# VERSION = 1.2-name
+# VERSION = 1.2.0003
+# VERSION = 1.2.3-name
+KVERSION    := $(shell echo $(VERSION) | sed -e 's/^\([1-9][0-9]*\)\..*/\1/' )
+KPATCHLEVEL := $(shell echo $(VERSION) | sed -e 's/^$(KVERSION)\.0*\([0-9][0-9]*\).*/\1/' )
+SUBLEVELTMP := $(shell echo $(VERSION) | sed -e 's/^$(KVERSION)\.0*$(KPATCHLEVEL)\.0*\([0-9][0-9]*\).*/\1/' )
 
-KVERNUM := $(shell echo $$(($(KVERSION)*10000+$(KPATCHLEVEL)*100+$(SUBLEVEL))))
+ifeq ($(SUBLEVELTMP),$(VERSION))
+SUBLEVEL=0
+else
+SUBLEVEL=$(SUBLEVELTMP)
+endif
 
 #****************************************************************************
 # decide to use KBUILD for 2.6.x and 3.x.x kernels
@@ -284,6 +296,7 @@ endif
 ifeq ($(USB),USB_SUPPORT)
 pcan-objs += $(SRC)/pcan_usb_core.o $(SRC)/pcan_usb.o
 pcan-objs += $(SRC)/pcan_usbpro.o $(SRC)/pcan_timing.o
+pcan-objs += $(SRC)/pcan_usbfd.o
 endif
 
 ifeq ($(NET),NETDEV_SUPPORT)
@@ -311,7 +324,12 @@ obj-m := pcan.o
 #****************************************************************************
 # add flags to standard flags
 #
-_CFLAGS += -I$(PWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
+# Note: to get listing from Kernel module compilation:
+# edit scripts/Makefile.build
+# -cmd_cc_o_c = $(CC) $(c_flags) -c -o $(@D)/.tmp_$(@F) $<
+# +cmd_cc_o_c = $(CC) $(c_flags) -c -Wa,-adhln=$<.lst -o $(@D)/.tmp_$(@F) $<
+#
+EXTRA_CFLAGS += -I$(PWD) -D$(DBG) -D$(MOD) -D$(PAR) -D$(USB) -D$(PCI) -D$(PCIEC) -D$(ISA) -D$(DNG) -D$(PCC) -D$(NET) -D$(RT) $(RT_CFLAGS)
 
 #****************************************************************************
 # do it in another way for kernels less than 2.6.5
@@ -322,7 +340,7 @@ USESUBDIRS  := $(shell if [ $(KVERSION) -eq 2 ] && [ $(KPATCHLEVEL) -eq 6 ] && [
 ifeq ($(USESUBDIRS),yes)
 CMDLINE = $(MAKE) -C $(KERNSRC) M=$(PWD)                                V=$(VERBOSE) modules
 else
-CMDLINE = $(MAKE) -C $(KERNSRC) SUBDIRS=$(PWD) EXTRA_CFLAGS="$(_CFLAGS)" V=$(VERBOSE) modules
+CMDLINE = $(MAKE) -C $(KERNSRC) SUBDIRS=$(PWD) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" V=$(VERBOSE) modules
 endif # <<<<< USESUBDIRS >>>>>>
 
 #****************************************************************************
@@ -486,5 +504,7 @@ message:
 
 endif  # <<<<< HASVERSION_H >>>>>>
 
+debug_kernel_version:
+	@echo "Major=$(KVERSION) Minor=$(KPATCHLEVEL) Subminor=$(SUBLEVEL)"
 # DO NOT DELETE
 

@@ -26,7 +26,7 @@
 //
 // all parts to handle the interface specific parts of PCAN-PCIExpressCard
 //
-// $Id: pcan_pciec.c 637 2010-10-24 20:51:10Z khitschler $
+// $Id: pcan_pciec.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

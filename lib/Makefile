@@ -25,7 +25,7 @@
 #
 # Makefile - Makefile for the shared library libpcan.so.x.x
 #
-# $Id: Makefile 517 2007-07-09 09:40:42Z edouard $
+# $Id: Makefile 753 2014-01-21 10:45:03Z stephane $
 #
 #****************************************************************************
 

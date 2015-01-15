@@ -36,7 +36,7 @@
 // pcan_main_linux.c - the starting point of the driver,
 //               init and cleanup and proc interface
 //
-// $Id: pcan_main_linux.c 576 2009-02-15 15:22:33Z khitschler $
+// $Id: pcan_main_linux.c 807 2014-12-09 15:34:11Z stephane $
 //
 //****************************************************************************
 
@@ -50,28 +50,33 @@
 //----------------------------------------------------------------------------
 // put received CAN frame into chardev receive FIFO
 // maybe this goes to a new file pcan_chardev.c some day.
-int pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv)
+int pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf,
+		    struct timeval *tv)
 {
 	int result = 0;
 
 	// filter out extended messages in non extended mode
-	if (dev->bExtended || !(cf->can_id & CAN_EFF_FLAG))
-	{
-		if (!pcan_do_filter(dev->filter, cf->can_id))
-		{
+	if (dev->bExtended || !(cf->can_id & CAN_EFF_FLAG)) {
+		if (!pcan_do_filter(dev->filter, cf->can_id)) {
 			TPCANRdMsg msg;
 			struct timeval tr;
 			get_relative_time(tv, &tr);
 			timeval2pcan(&tr, &msg.dwTime, &msg.wUsec);
 
-			/* convert to old style FIFO message until FIFO supports new */
+			/*
+			 * convert to old style FIFO message until FIFO
+			 * supports new
+			 */
 			/* struct can_frame and error frames */
 			frame2msg(cf, &msg.Msg);
 
-			// step forward in fifo
+			/* step forward in fifo */
 			result = pcan_fifo_put(&dev->readFifo, &msg);
 
-			// flag to higher layers that a message was put into fifo or an error occurred
+			/*
+			 * flag to higher layers that a message was put into
+			 * fifo or an error occurred
+			 */
 			result = (result) ? result : 1;
 		}
 	}
@@ -85,16 +90,22 @@ void pcan_device_node_create(struct pcandev *dev)
 #ifdef UDEV_SUPPORT
 	char template[15];
 
-	// tinker my device node name, eg. "pcanpci%d"
+	/* tinker my device node name, eg. "pcanpci%d" */
 	strncpy(template, "pcan", sizeof(template));
-	strncat(template, dev->type, 6); // max 'pccard'
+	strncat(template, dev->type, 6); /* max 'pccard' 'usbpro' */
 	strncat(template, "%d", 2);
-	DPRINTK(KERN_DEBUG "%s: device_create(%s, %d, %d)\n", DEVICE_NAME, template, pcan_drv.nMajor, dev->nMinor);
-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
-	device_create(pcan_drv.class, NULL, MKDEV(pcan_drv.nMajor, dev->nMinor), NULL, template, dev->nMinor);
-	#else
-	device_create(pcan_drv.class, NULL, MKDEV(pcan_drv.nMajor, dev->nMinor), template, dev->nMinor);
+	DPRINTK(KERN_DEBUG "%s: device_create(%s, %d, %d)\n",
+		DEVICE_NAME, template, pcan_drv.nMajor, dev->nMinor);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+	device_create(pcan_drv.class, NULL,
+		MKDEV(pcan_drv.nMajor, dev->nMinor),
+		NULL, template, dev->nMinor);
+#else
+	device_create(pcan_drv.class, NULL,
+		MKDEV(pcan_drv.nMajor, dev->nMinor),
+		template, dev->nMinor);
 #endif
+
 #endif
 }
 
@@ -123,13 +134,14 @@ static int dev_register(void)
 		//         (here & now! - see above) or at plugin t/ime.
 		mutex_lock(&pcan_drv.devices_lock);
 
-		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
-		{
+		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices;
+								ptr=ptr->next) {
 			pdev = (struct pcandev *)ptr;
-			switch (pdev->wType)
-			{
+			switch (pdev->wType) {
 			case HW_USB:
+			case HW_USB_FD:
 			case HW_USB_PRO:
+			case HW_USB_PRO_FD:
 			case HW_PCCARD:
 				break;
 			default:
@@ -148,28 +160,30 @@ static int dev_register(void)
 
 		mutex_lock(&pcan_drv.devices_lock);
 
-		for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-		{
+		for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices;
+							ptr = ptr->next) {
 			dev = (struct pcandev *)ptr;
 
-			switch (dev->wType)
-			{
-			  case HW_PCI:
-			  case HW_ISA:
-			  case HW_DONGLE_SJA:
-			  /*
-			   * udev events were not generated for ISA.
-			   * Thx David Leonard
-			   */
-			  case HW_ISA_SJA:
-			  case HW_DONGLE_SJA_EPP: pcan_device_node_create(dev);
-			    break;
-			  case HW_USB:
-			  case HW_USB_PRO:
-			  case HW_PCCARD:
-			  default:
-			    // do nothing, it's handled at hotplug
-			    break;
+			switch (dev->wType) {
+			case HW_PCI:
+			case HW_ISA:
+			case HW_DONGLE_SJA:
+				/*
+				 * udev events were not generated for ISA.
+				 * Thx David Leonard
+				 */
+			case HW_ISA_SJA:
+			case HW_DONGLE_SJA_EPP:
+				pcan_device_node_create(dev);
+				break;
+			case HW_USB:
+			case HW_USB_FD:
+			case HW_USB_PRO:
+			case HW_USB_PRO_FD:
+			case HW_PCCARD:
+			default:
+				/* do nothing, it's handled at hotplug */
+				break;
 			}
 		}
 
@@ -192,21 +206,22 @@ void dev_unregister(void)
 
 		mutex_lock(&pcan_drv.devices_lock);
 
-		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
-		{
+		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices;
+								ptr=ptr->next) {
 			dev = (struct pcandev *)ptr;
 
-			switch(dev->wType)
-			{
+			switch(dev->wType) {
 			case HW_PCI:
 			case HW_ISA:
 			case HW_ISA_SJA:
 			case HW_DONGLE_SJA:
-			case HW_DONGLE_SJA_EPP: 
+			case HW_DONGLE_SJA_EPP:
 				pcan_device_node_destroy(dev);
 				break;
 			case HW_USB:
+			case HW_USB_FD:
 			case HW_USB_PRO:
+			case HW_USB_PRO_FD:
 			case HW_PCCARD:
 			default:
 				// do nothing, it's handled at hot(un)plug
@@ -226,13 +241,14 @@ void dev_unregister(void)
 		// which is done by pcan_usb_plugout().
 		mutex_lock(&pcan_drv.devices_lock);
 
-		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr=ptr->next)
-		{
+		for (ptr=pcan_drv.devices.next; ptr != &pcan_drv.devices;
+								ptr=ptr->next) {
 			pdev = (struct pcandev *)ptr;
-			switch(pdev->wType)
-			{
+			switch(pdev->wType) {
 			case HW_USB:
+			case HW_USB_FD:
 			case HW_USB_PRO:
+			case HW_USB_PRO_FD:
 				break;
 			default:
 				pcan_netdev_unregister(pdev);
@@ -243,5 +259,3 @@ void dev_unregister(void)
 	}
 #endif
 }
-
-

@@ -25,7 +25,7 @@
 #
 # Makefile - Makefile for receivetest and transmittest programs
 #
-# $Id: Makefile 616 2010-02-14 22:41:17Z khitschler $
+# $Id: Makefile 753 2014-01-21 10:45:03Z stephane $
 #
 #****************************************************************************
 

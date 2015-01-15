@@ -10,7 +10,7 @@
 # Thus, workaround here is to check if usb device minor is smaller than 32.
 # If it is not, nothing is done (e.g. outputs the given minor).
 # Otherwise, the script outputs the first free number, starting from 32 (x is 
-# free => no /dev/pcanx does exist)
+# free <=> no /dev/pcanx does exist)
 # Next rule key should take "%c" (instead of %m) into its formatted string.
 #
 # This Bash script is to be executed with the following udev rule:
@@ -21,15 +21,12 @@
 MAX_USB_MINORS=256      # see drivers/usb/core/file.c
 PCAN_USB_MINOR_BASE=32  # see driver/src/pcan_main.h
 
-if [ -n "$1" ] && [ $1 -lt ${PCAN_USB_MINOR_BASE} ]
-then
-   for ((m=${PCAN_USB_MINOR_BASE}; m < MAX_USB_MINORS; m++))
-   do
-      if [ ! -e "/dev/pcan${m}" ]; then break; fi
-   done
-   if [ $m -ge ${MAX_USB_MINORS} ]; then exit 1; fi
+if [ -n "$1" ] && [ $1 -lt ${PCAN_USB_MINOR_BASE} ]; then
+	let "m=${PCAN_USB_MINOR_BASE}+$1"
 else
-   m=$1
+	m=$1
 fi
-echo ${m}
+
+echo $m
+
 exit 0

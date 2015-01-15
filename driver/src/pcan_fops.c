@@ -34,7 +34,7 @@
 //
 // pcan_fops.c - all file operation functions, exports only struct fops
 //
-// $Id: pcan_fops.c 629 2010-08-12 20:05:12Z khitschler $
+// $Id: pcan_fops.c 807 2014-12-09 15:34:11Z stephane $
 //
 //****************************************************************************
 
@@ -91,7 +91,7 @@
 #endif
 
 MODULE_AUTHOR("klaus.hitschler@gmx.de");
-MODULE_DESCRIPTION("Driver for PEAK-Systems CAN interfaces.");
+MODULE_DESCRIPTION("Driver for PEAK-System CAN interfaces");
 MODULE_VERSION(CURRENT_RELEASE);
 MODULE_SUPPORTED_DEVICE("PCAN-ISA, PCAN-PC/104, PCAN-Dongle, PCAN-PCI(e), PCAN-ExpressCard, PCAN-PCCard, PCAN-USB (compilation dependent)");
 MODULE_LICENSE("GPL");
@@ -142,75 +142,83 @@ EXPORT_NO_SYMBOLS;
 //****************************************************************************
 // CODE
 #ifdef NO_RT
-  #include "pcan_fops_linux.c"
+	#include "pcan_fops_linux.c"
 #else
-  #include "pcan_fops_rt.c"
+	#include "pcan_fops_rt.c"
 #endif
 
 //----------------------------------------------------------------------------
 // is called by pcan_open() and pcan_netdev_open()
 int pcan_open_path(PCAN_OPEN_PATH_ARGS)
 {
-  int err = 0;
+	int err = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_open_path, minor = %d, path = %d.\n",
-    DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
+	DPRINTK(KERN_DEBUG "%s: pcan_open_path, minor = %d, path = %d.\n",
+		DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
 
-  // only the first open to this device makes a default init on this device
-  if (!dev->nOpenPaths)
-  {
-    // empty all FIFOs
-    err = pcan_fifo_reset(&dev->writeFifo);
-    if (err)
-      return err;
-    err = pcan_fifo_reset(&dev->readFifo);
-    if (err)
-      return err;
+	// only the 1st open to this device makes a default init on this device
+	if (!dev->nOpenPaths) {
+		// empty all FIFOs
+		err = pcan_fifo_reset(&dev->writeFifo);
+		if (err)
+			return err;
+		err = pcan_fifo_reset(&dev->readFifo);
+		if (err)
+			return err;
 
-    // open the interface special parts
-    err = dev->open(dev);
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't open interface special parts!\n", DEVICE_NAME);
-      return err;
-    }
+		// open the interface special parts
+		err = dev->open(dev);
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't open interface special parts!\n",
+				DEVICE_NAME);
+			return err;
+		}
 
-    // special handling: probe here only for dongle devices, connect after init is possible
-    if ((dev->wType == HW_DONGLE_SJA) || (dev->wType == HW_DONGLE_SJA_EPP))
-    {
-      err = sja1000_probe(dev); // no usb here, generic sja1000 call for dongle
-      if (err)
-      {
-        DPRINTK(KERN_ERR "%s: %s-dongle device minor %d not found (io=0x%04x,irq=%d)\n", DEVICE_NAME,
-                                  dev->type, dev->nMinor, dev->port.dng.dwPort, dev->port.dng.wIrq);
-        dev->release(dev);
-        return err;
-      }
-    }
+		/*
+		 * special handling: probe here only for dongle devices,
+		 * connect after init is possible
+		 */
+		if ((dev->wType == HW_DONGLE_SJA) ||
+				(dev->wType == HW_DONGLE_SJA_EPP)) {
+			err = sja1000_probe(dev); // no usb here, generic sja1000 call for dongle
+			if (err) {
+				DPRINTK(KERN_ERR
+					"%s: %s-dongle device minor %d not found (io=0x%04x,irq=%d)\n",
+					DEVICE_NAME, dev->type, dev->nMinor,
+					dev->port.dng.dwPort,
+					dev->port.dng.wIrq);
+				dev->release(dev);
+				return err;
+			}
+		}
 
-    // install irq
-    err = dev->req_irq(REQ_IRQ_ARG);
+		// install irq
+		err = dev->req_irq(REQ_IRQ_ARG);
 
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't request irq from device!\n", DEVICE_NAME);
-      return err;
-    }
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't request irq from device!\n",
+				DEVICE_NAME);
+			return err;
+		}
 
-    // open the device itself
-    err = dev->device_open(dev, dev->wBTR0BTR1, dev->ucCANMsgType, dev->ucListenOnly);
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't open device hardware itself!\n", DEVICE_NAME);
-      return err;
-    }
-  }
+		// open the device itself
+		err = dev->device_open(dev, dev->wBTR0BTR1, dev->ucCANMsgType,
+				       dev->ucListenOnly);
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't open device hardware itself!\n",
+				DEVICE_NAME);
+			return err;
+		}
+	}
 
-  dev->nOpenPaths++;
+	dev->nOpenPaths++;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_open_path() is OK\n", DEVICE_NAME);
+	DPRINTK(KERN_DEBUG "%s: pcan_open_path() is OK\n", DEVICE_NAME);
 
-  return 0;
+	return 0;
 }
 
 //----------------------------------------------------------------------------
@@ -261,13 +269,15 @@ void pcan_release_path(PCAN_RELEASE_PATH_ARGS)
 	DPRINTK(KERN_DEBUG "%s: pcan_release_path, minor = %d, path = %d.\n",
 		DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
 
-	// if it's the last release: init the chip for non-intrusive operation
+	/* if it's the last release: init the chip for non-intrusive operation*/
 	if (dev->nOpenPaths > 1) {
 		dev->nOpenPaths--;
-	} else {
+
+	} else  {
+
 		WAIT_UNTIL_FIFO_EMPTY();
 
-		// release the device itself
+		/* release the device itself */
 		dev->device_release(dev);
 
 		dev->release(dev);
@@ -344,7 +354,9 @@ int pcan_ioctl_diag_common(struct pcandev *dev, TPDIAG *local)
 		local->wIrqLevel = dev->port.pci.wIrq;
 		break;
 	case HW_USB:
+	case HW_USB_FD:
 	case HW_USB_PRO:
+	case HW_USB_PRO_FD:
 #ifdef USB_SUPPORT
 		local->dwBase = dev->port.usb.usb_if->dwSerialNumber;
 		local->wIrqLevel = dev->port.usb.ucHardcodedDevNr;

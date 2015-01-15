@@ -35,7 +35,7 @@
 //
 // pcan_fops.h - header for struct fops only
 //
-// $Id: pcan_fops.h 518 2007-08-08 07:40:31Z edouard $
+// $Id: pcan_fops.h 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

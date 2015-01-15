@@ -32,7 +32,7 @@
 //
 // all parts of the isa hardware for pcan-isa devices
 //
-// $Id: pcan_isa.c 606 2010-02-10 19:47:16Z ohartkopp $
+// $Id: pcan_isa.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

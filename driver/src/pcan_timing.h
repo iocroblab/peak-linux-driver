@@ -61,10 +61,15 @@ struct pcan_timing_abstract
 /* Parameter limits for baud rate timing on a given CAN-controller */
 struct pcan_timing_capabilities
 {
-	uint32_t   max_prescaler;
 	uint32_t   max_tseg1;
+	uint32_t   min_tseg1;
 	uint32_t   max_tseg2;
+	uint32_t   min_tseg2;
 	uint32_t   max_sjw;
+	uint32_t   min_sjw;
+	/* uint32_t   max_prescaler; */
+	uint32_t   max_brp;
+	uint32_t   min_brp;
 
 	uint32_t   intern_prescaler; // if sysclock is divided before reaching 
 	                             // the prescaler.
@@ -86,7 +91,6 @@ struct pcan_timing_baudrate
 };
 
 /* Controller timing capabilities */
-extern const struct pcan_timing_capabilities sja2010_capabilities;
 extern const struct pcan_timing_capabilities sja1000_capabilities;
 
 void pcan_BTR0BTR1_to_abstract(uint16_t, struct pcan_timing_abstract *);

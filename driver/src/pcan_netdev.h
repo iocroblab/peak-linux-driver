@@ -26,7 +26,7 @@
 //
 // pcan_netdev.h - CAN network device support defines / prototypes
 //
-// $Id: pcan_netdev.h 607 2010-02-12 07:05:02Z ohartkopp $
+// $Id: pcan_netdev.h 753 2014-01-21 10:45:03Z stephane $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>

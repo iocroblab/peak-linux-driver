@@ -34,7 +34,7 @@
 //
 // all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_dongle.c 606 2010-02-10 19:47:16Z ohartkopp $
+// $Id: pcan_dongle.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

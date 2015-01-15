@@ -1,7 +1,7 @@
 //****************************************************************************
 // Copyright (C) 2001-2009  PEAK System-Technik GmbH
 //
-// linux@peak-system.com 
+// linux@peak-system.com
 // www.peak-system.com
 //
 // This program is free software; you can redistribute it and/or modify
@@ -84,10 +84,10 @@ int nExtended = CAN_INIT_TYPE_ST;
 //****************************************************************************
 // DEFINES
 
-#define STATE_FILE_OPENED         1
-#define STATE_TASK_CREATED        2
-#define SET_INIT_STATE(new_state) current_state |= new_state
-#define RESET_INIT_STATE(new_state) current_state &= ~new_state
+#define STATE_FILE_OPENED		1
+#define STATE_TASK_CREATED		2
+#define SET_INIT_STATE(new_state)	current_state |= new_state
+#define RESET_INIT_STATE(new_state)	current_state &= ~new_state
 
 //****************************************************************************
 // GLOBALS
@@ -105,39 +105,39 @@ static pthread_t writing_thr;
 #endif
 
 //****************************************************************************
-// SPECIFICS FUNCTIONS FOR REALTIME 
+// SPECIFICS FUNCTIONS FOR REALTIME
 
 void do_exit(int error)
 {
-  shutdownnow = 1;
-  if (current_state & STATE_FILE_OPENED) {
-    print_diag("transmitest");
-    CAN_Close(h);
-    RESET_INIT_STATE(STATE_FILE_OPENED);
-  }
+	shutdownnow = 1;
+	if (current_state & STATE_FILE_OPENED) {
+		print_diag("transmitest");
+		CAN_Close(h);
+		RESET_INIT_STATE(STATE_FILE_OPENED);
+	}
 
 #ifdef XENOMAI
-  if (current_state & STATE_TASK_CREATED) {
-    rt_task_delete(&writing_task);
-    RESET_INIT_STATE(STATE_TASK_CREATED);
-  }
+	if (current_state & STATE_TASK_CREATED) {
+		rt_task_delete(&writing_task);
+		RESET_INIT_STATE(STATE_TASK_CREATED);
+	}
 #endif
 
 #ifdef RTAI
-  pthread_join(writing_thr, NULL);
-  if (current_state & STATE_TASK_CREATED) {
-    RESET_INIT_STATE(STATE_TASK_CREATED);
-  }
-  rt_task_delete(maint);
+	pthread_join(writing_thr, NULL);
+	if (current_state & STATE_TASK_CREATED) {
+		RESET_INIT_STATE(STATE_TASK_CREATED);
+	}
+	rt_task_delete(maint);
 #endif
 }
 
 void signal_handler(int unused)
 {
-  /* re-install signal handler */
-  /* let main() executes after pause() */
-  signal(SIGTERM, signal_handler);
-  signal(SIGINT, signal_handler);
+	/* re-install signal handler */
+	/* let main() executes after pause() */
+	signal(SIGTERM, signal_handler);
+	signal(SIGINT, signal_handler);
 }
 
 //----------------------------------------------------------------------------
@@ -145,286 +145,299 @@ void signal_handler(int unused)
 void writing_task_proc(void *arg)
 {
 #ifdef RTAI
-  writing_task = rt_task_init_schmod(nam2num("WRTSK"),2, 0, 0, SCHED_FIFO, 0xF);
-  rt_make_hard_real_time();
+	writing_task = rt_task_init_schmod(nam2num("WRTSK"),2, 0, 0,
+						SCHED_FIFO, 0xF);
+	rt_make_hard_real_time();
 #endif
-  
-  while (1) {
-    std::list<TPCANMsg>::iterator iter;
-    for (iter = List->begin(); iter != List->end(); iter++) {
-      // test for standard frames only
-      if ((nExtended == CAN_INIT_TYPE_EX) || !(iter->MSGTYPE & MSGTYPE_EXTENDED)) {
-        // send the message
-        if ((errno = CAN_Write(h, &(*iter))))
-          shutdownnow = 1;
-      }
-      if (shutdownnow == 1) break;
-    }
-    if (shutdownnow == 1) break;
-  }
+
+	while (1) {
+		std::list<TPCANMsg>::iterator iter;
+		for (iter = List->begin(); iter != List->end(); iter++) {
+			// test for standard frames only
+			if ((nExtended == CAN_INIT_TYPE_EX) ||
+					!(iter->MSGTYPE & MSGTYPE_EXTENDED)) {
+				// send the message
+				if ((errno = CAN_Write(h, &(*iter))))
+					shutdownnow = 1;
+			}
+			if (shutdownnow == 1)
+				break;
+		}
+		if (shutdownnow == 1)
+			break;
+	}
 #ifdef RTAI
-  rt_make_soft_real_time();
-  rt_task_delete(writing_task);
+	rt_make_soft_real_time();
+	rt_task_delete(writing_task);
 #endif
 }
 
 int init()
 {
-  mlockall(MCL_CURRENT | MCL_FUTURE);
-  /* Initialize LXRT */
+	mlockall(MCL_CURRENT | MCL_FUTURE);
+	/* Initialize LXRT */
 #ifdef RTAI
-  maint = rt_task_init_schmod(nam2num("MAINT"), 3, 0, 0, SCHED_FIFO, 0xF);
-#endif 
+	maint = rt_task_init_schmod(nam2num("MAINT"), 3, 0, 0,
+					SCHED_FIFO, 0xF);
+#endif
 }
 
 // start writing task
 int write_loop()
 {
 #ifdef XENOMAI
-  errno = rt_task_create(&writing_task,NULL,0,50,0);
-  if (errno) {
-    printf("transmitest: Failed to create rt task, code %d\n",errno);
-    return errno;
-  }
-  errno = rt_task_start(&writing_task,&writing_task_proc,NULL);
-  if (errno) {
-    printf("transmitest: Failed to start rt task, code %d\n",errno);
-    return errno;
-  }
+	errno = rt_task_create(&writing_task,NULL,0,50,0);
+	if (errno) {
+		printf("transmitest: Failed to create rt task, code %d\n",
+			errno);
+		return errno;
+	}
+	errno = rt_task_start(&writing_task,&writing_task_proc,NULL);
+	if (errno) {
+		printf("transmitest: Failed to start rt task, code %d\n",
+			errno);
+		return errno;
+	}
 #endif
 
 #ifdef RTAI
-  errno = pthread_create(&writing_thr, NULL, (void *(*)(void *))&writing_task_proc, NULL);
-  if (errno) {
-    printf("transmitest: Failed to create and start rt task, code %d\n",errno);
-    return errno;
-  }
-#endif 
+	errno = pthread_create(&writing_thr, NULL,
+			(void *(*)(void *))&writing_task_proc, NULL);
+	if (errno) {
+		printf("transmitest: Failed to create and start rt task, code %d\n",
+			errno);
+		return errno;
+	}
+#endif
 
-  SET_INIT_STATE(STATE_TASK_CREATED);
-  printf("transmitest: writing data to CAN ... (press Ctrl-C to exit)\n");
+	SET_INIT_STATE(STATE_TASK_CREATED);
+	printf("transmitest: writing data to CAN ... (press Ctrl-C to exit)\n");
 
-  pause();
+	pause();
 
-  printf("transmitest: finishing\n");
-  do_exit(0);
- 
-  return 0;
+	printf("transmitest: finishing\n");
+	do_exit(0);
+
+	return 0;
 }
 
 static void hlpMsg(void)
 {
-  printf("transmitest - a small test program which sends CAN messages.\n");
-  printf("usage:   transmitest filename {[-f=devicenode] | {[-t=type] [-p=port [-i=irq]]}} [-b=BTR0BTR1] [-e] [-?]\n");
-  printf("options: filename - mandatory name of message description file.\n");
-  printf("         -f - devicenode - path to devicefile, default=%s\n", DEFAULT_NODE);
-  printf("         -t - type of interface, e.g. 'pci', 'sp', 'epp' ,'isa', 'pccard' or 'usb' (default: pci).\n");
-  printf("         -p - port in hex notation if applicable, e.g. 0x378 (default: 1st port of type).\n");
-  printf("         -i - irq in dec notation if applicable, e.g. 7 (default: irq of 1st port).\n");
-  printf("         -b - BTR0BTR1 code in hex, e.g. 0x001C (default: 500 kbit).\n");
-  printf("         -e - accept extended frames. (default: standard frames)\n");
-  printf("         -? or --help - this help\n");
-  printf("\n");
+	printf("transmitest - a small test program which sends CAN messages.\n");
+	printf("usage:   transmitest filename {[-f=devicenode] | {[-t=type] [-p=port [-i=irq]]}} [-b=BTR0BTR1] [-e] [-?]\n");
+	printf("options: filename - mandatory name of message description file.\n");
+	printf("         -f - devicenode - path to devicefile, default=%s\n", DEFAULT_NODE);
+	printf("         -t - type of interface, e.g. 'pci', 'sp', 'epp' ,'isa', 'pccard' or 'usb' (default: pci).\n");
+	printf("         -p - port in hex notation if applicable, e.g. 0x378 (default: 1st port of type).\n");
+	printf("         -i - irq in dec notation if applicable, e.g. 7 (default: irq of 1st port).\n");
+	printf("         -b - BTR0BTR1 code in hex, e.g. 0x001C (default: 500 kbit).\n");
+	printf("         -e - accept extended frames. (default: standard frames)\n");
+	printf("         -? or --help - this help\n");
+	printf("\n");
 }
 
 int main(int argc, char *argv[])
 {
-  char *ptr;
-  int i;
-  int nType = HW_PCI;
-  __u32 dwPort = 0;
-  __u16 wIrq = 0;
-  __u16 wBTR0BTR1 = 0;
-  char *filename = NULL;
-  const char *szDevNode = DEFAULT_NODE;
-  bool bDevNodeGiven = false;
-  bool bTypeGiven = false;
-  parser MyParser;
-  char txt[VERSIONSTRING_LEN];
+	char *ptr;
+	int i;
+	int nType = HW_PCI;
+	__u32 dwPort = 0;
+	__u16 wIrq = 0;
+	__u16 wBTR0BTR1 = 0;
+	char *filename = NULL;
+	const char *szDevNode = DEFAULT_NODE;
+	bool bDevNodeGiven = false;
+	bool bTypeGiven = false;
+	parser MyParser;
+	char txt[VERSIONSTRING_LEN];
 
-  errno = 0;
+	errno = 0;
 
-  current_release = CURRENT_RELEASE;
-  disclaimer("transmitest");
+	current_release = CURRENT_RELEASE;
+	disclaimer("transmitest");
 
-  init();
+	init();
 
-  // decode command line arguments
-  for (i = 1; i < argc; i++) {
-    char c;
+	// decode command line arguments
+	for (i = 1; i < argc; i++) {
+		char c;
 
-    ptr = argv[i];
+		ptr = argv[i];
 
-    if (*ptr == '-') {
-      while (*ptr == '-')
-        ptr++;
+		if (*ptr == '-') {
+			while (*ptr == '-')
+				ptr++;
 
-      c = *ptr;
-      ptr++;
+			c = *ptr;
+			ptr++;
 
-      if (*ptr == '=')
-      ptr++;
+			if (*ptr == '=')
+				ptr++;
 
-      switch(tolower(c)) {
-        case 'f':
-          szDevNode = ptr;
-          bDevNodeGiven = true;
-          break;
-        case 't':
-          nType = getTypeOfInterface(ptr);
-          if (!nType) {
-            errno = EINVAL;
-            printf("transmitest: unknown type of interface\n");
-            goto error;
-          }
-          bTypeGiven = true;
-          break;
-        case 'p':
-          dwPort = strtoul(ptr, NULL, 16);
-          break;
-        case 'i':
-          wIrq   = (__u16)strtoul(ptr, NULL, 10);
-          break;
-        case 'e':
-          nExtended = CAN_INIT_TYPE_EX;
-          break;
-        case '?': 
-        case 'h':
-          hlpMsg();
-          goto error;
-          break;
-        case 'b':
-          wBTR0BTR1 = (__u16)strtoul(ptr, NULL, 16);
-          break;
-        default:
-          errno = EINVAL;
-          printf("transmitest: unknown command line argument\n");
-          goto error;
-          break;
-      }
-    }
-    else
-      filename = ptr;
-  }
+			switch(tolower(c)) {
+			case 'f':
+				szDevNode = ptr;
+				bDevNodeGiven = true;
+				break;
+			case 't':
+				nType = getTypeOfInterface(ptr);
+				if (!nType) {
+					errno = EINVAL;
+					printf("transmitest: unknown type of interface\n");
+					goto error;
+				}
+				bTypeGiven = true;
+				break;
+			case 'p':
+				dwPort = strtoul(ptr, NULL, 16);
+				break;
+			case 'i':
+				wIrq = (__u16)strtoul(ptr, NULL, 10);
+				break;
+			case 'e':
+				nExtended = CAN_INIT_TYPE_EX;
+				break;
+			case '?':
+			case 'h':
+				hlpMsg();
+				goto error;
+				break;
+			case 'b':
+				wBTR0BTR1 = (__u16)strtoul(ptr, NULL, 16);
+				break;
+			default:
+				errno = EINVAL;
+				printf("transmitest: unknown command line argument\n");
+				goto error;
+				break;
+			}
+		}
+		else
+			filename = ptr;
+	}
 
-  // test for filename
-  if (filename == NULL) {
-    errno = EINVAL;
-    perror("transmitest: no filename given");
-    goto error;
-  }
+	// test for filename
+	if (filename == NULL) {
+		errno = EINVAL;
+		perror("transmitest: no filename given");
+		goto error;
+	}
 
-  // test device node and type
-  if (bDevNodeGiven && bTypeGiven) {
-    errno = EINVAL;
-    perror("transmitest: device node and type together is useless");
-    goto error;
-  }
+	// test device node and type
+	if (bDevNodeGiven && bTypeGiven) {
+		errno = EINVAL;
+		perror("transmitest: device node and type together is useless");
+		goto error;
+	}
 
-  // give the filename to my parser
-  MyParser.setFileName(filename);
+	// give the filename to my parser
+	MyParser.setFileName(filename);
 
-  // tell some information to user
-  if (!bTypeGiven) {
-    printf("transmitest: device node=\"%s\"\n", szDevNode);
-  }
-  else {
-    printf("transmitest: type=%s", getNameOfInterface(nType));
-    if (nType == HW_USB) {
-      printf(", Serial Number=default, Device Number=%d\n", dwPort); 
-    }
-    else {
-      if (dwPort) {
-        if (nType == HW_PCI)
-          printf(", %d. PCI device", dwPort);
-        else
-          printf(", port=0x%08x", dwPort);
-      }
-      else
-        printf(", port=default");
-      
-      if ((wIrq) && !(nType == HW_PCI))
-        printf(" irq=0x%04x\n", wIrq);
-      else
-        printf(", irq=default\n");
-    }
-  }
+	// tell some information to user
+	if (!bTypeGiven) {
+		printf("transmitest: device node=\"%s\"\n", szDevNode);
+	} else {
+		printf("transmitest: type=%s", getNameOfInterface(nType));
+		switch (nType) {
+		case HW_USB:
+		case HW_USB_PRO:
+		case HW_USB_FD:
+		case HW_USB_PRO_FD:
+			printf(", Serial Number=default, Device Number=%d\n",
+				dwPort);
+			break;
+		default:
+			if (dwPort) {
+				if (nType == HW_PCI)
+					printf(", %d. PCI device", dwPort);
+				else
+					printf(", port=0x%08x", dwPort);
+			} else
+				printf(", port=default");
 
-  if (nExtended == CAN_INIT_TYPE_EX)
-    printf("             Extended frames are sent");
-  else
-    printf("             Only standard frames are sent");
-  
-  if (wBTR0BTR1)
-    printf(", init with BTR0BTR1=0x%04x\n", wBTR0BTR1);
-  else
-    printf(", init with 500 kbit/sec.\n");
-    printf("             Data will be read from \"%s\".\n", filename);
+			if ((wIrq) && !(nType == HW_PCI))
+				printf(" irq=0x%04x\n", wIrq);
+			else
+				printf(", irq=default\n");
+			break;
+		}
+	}
 
-  /* install signal handlers */
-  signal(SIGTERM, signal_handler);
-  signal(SIGINT, signal_handler);
-  
-  /* get the list of data from parser */
-  List = MyParser.Messages();
-  if (!List)
-  {
-    errno = MyParser.nGetLastError();
-    perror("transmitest: error at file read");
-    goto error;
-  }
-  
-  /* open CAN port */
-  if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) {
-    h = LINUX_CAN_Open(szDevNode, O_RDWR);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
-      printf("transmitest: can't open %s\n", szDevNode);
-      goto error;
-    }
-  }
-  else {
-    // please use what is appropriate  
-    // HW_DONGLE_SJA 
-    // HW_DONGLE_SJA_EPP 
-    // HW_ISA_SJA 
-    // HW_PCI 
-    h = CAN_Open(nType, dwPort, wIrq);
-    if (h)
-      SET_INIT_STATE(STATE_FILE_OPENED);
-    else {
-      printf("transmitest: can't open %s device.\n", getNameOfInterface(nType));
-      goto error;
-    }
-  }
+	if (nExtended == CAN_INIT_TYPE_EX)
+		printf("             Extended frames are sent");
+	else
+		printf("             Only standard frames are sent");
 
-  /* clear status */
-  CAN_Status(h);
-  
-  // get version info
-  errno = CAN_VersionInfo(h, txt);
-  if (!errno)
-    printf("transmitest: driver version = %s\n", txt);
-  else {
-    perror("transmitest: CAN_VersionInfo()");
-    goto error;
-  }
-  
-  // init to a user defined bit rate
-  if (wBTR0BTR1) {
-    errno = CAN_Init(h, wBTR0BTR1, nExtended);
-    if (errno) {
-      perror("transmitest: CAN_Init()");
-      goto error;
-    }
-  }
-  // enter in the write loop
-  errno = write_loop();
-  if (!errno)
-    return 0;
+	if (wBTR0BTR1)
+		printf(", init with BTR0BTR1=0x%04x\n", wBTR0BTR1);
+	else
+		printf(", init with 500 kbit/sec.\n");
+		printf("             Data will be read from \"%s\".\n",
+			filename);
 
-  error:
-    do_exit(errno);
-    return errno;
+	/* install signal handlers */
+	signal(SIGTERM, signal_handler);
+	signal(SIGINT, signal_handler);
+
+	/* get the list of data from parser */
+	List = MyParser.Messages();
+	if (!List) {
+		errno = MyParser.nGetLastError();
+		perror("transmitest: error at file read");
+		goto error;
+	}
+
+	/* open CAN port */
+	if ((bDevNodeGiven) || (!bDevNodeGiven && !bTypeGiven)) {
+		h = LINUX_CAN_Open(szDevNode, O_RDWR);
+		if (h)
+			SET_INIT_STATE(STATE_FILE_OPENED);
+		else {
+			printf("transmitest: can't open %s\n", szDevNode);
+			goto error;
+		}
+	} else {
+		// please use what is appropriate
+		// HW_DONGLE_SJA
+		// HW_DONGLE_SJA_EPP
+		// HW_ISA_SJA
+		// HW_PCI
+		h = CAN_Open(nType, dwPort, wIrq);
+		if (h)
+			SET_INIT_STATE(STATE_FILE_OPENED);
+		else {
+			printf("transmitest: can't open %s device.\n",
+				getNameOfInterface(nType));
+			goto error;
+		}
+	}
+
+	/* clear status */
+	CAN_Status(h);
+
+	// get version info
+	errno = CAN_VersionInfo(h, txt);
+	if (!errno)
+		printf("transmitest: driver version = %s\n", txt);
+	else {
+		perror("transmitest: CAN_VersionInfo()");
+		goto error;
+	}
+
+	// init to a user defined bit rate
+	if (wBTR0BTR1) {
+		errno = CAN_Init(h, wBTR0BTR1, nExtended);
+		if (errno) {
+			perror("transmitest: CAN_Init()");
+			goto error;
+		}
+	}
+	// enter in the write loop
+	errno = write_loop();
+	if (!errno)
+		return 0;
+
+error:
+	do_exit(errno);
+	return errno;
 }

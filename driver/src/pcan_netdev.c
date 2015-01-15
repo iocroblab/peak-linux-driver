@@ -26,7 +26,7 @@
 //
 // pcan_netdev.c - CAN network device support functions
 //
-// $Id: pcan_netdev.c 607 2010-02-12 07:05:02Z ohartkopp $
+// $Id: pcan_netdev.c 798 2014-10-17 08:19:34Z stephane $
 //
 // For CAN netdevice / socketcan specific questions please check the
 // Mailing List <socketcan-users@lists.berlios.de>
@@ -46,6 +46,12 @@
 #include <src/pcan_fops.h>  /* pcan_open_path(), pcan_release_path() */
 #include <src/pcan_fifo.h>
 #include <src/pcan_netdev.h>
+
+/*
+ * if defined, fix "Kernel NULL pointer dereference" when creating "canx"
+ * interface under high busload conditions (should be defined)
+ */
+#define BUG_FIX_NULL_NETDEV
 
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
@@ -184,8 +190,17 @@ free_out:
 int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv)
 {
   struct net_device *ndev = dev->netdev;
-  struct net_device_stats *stats = pcan_netdev_get_stats(ndev);
+  struct net_device_stats *stats;
   struct sk_buff *skb;
+
+#ifdef BUG_FIX_NULL_NETDEV
+	/*
+	 * under high busload condtions, interrupts may occur before everything
+	 * has been completed.
+	 */
+	if (!ndev)
+		return 0;
+#endif
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, ndev->name);
         
@@ -194,7 +209,7 @@ int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv
   if (skb == NULL)
     return -ENOMEM;
 
-  skb->dev      = ndev;
+  skb->dev = ndev;
   skb->protocol = htons(ETH_P_CAN);
   skb->pkt_type = PACKET_BROADCAST;
   skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -225,6 +240,8 @@ int pcan_netdev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv
   netif_rx(skb);
 
   ndev->last_rx = jiffies;
+
+  stats = pcan_netdev_get_stats(ndev);
   stats->rx_packets++;
   stats->rx_bytes += cf->can_dlc;
 
@@ -283,6 +300,23 @@ void pcan_netdev_init(struct net_device *dev)
 #endif
 }
 
+#ifdef PCAN_DEV_USES_ALT_NUM
+static void pcan_check_ifname(char *name)
+{
+	/* check wanted assigned 'name' against existing device names */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+	if (__dev_get_by_name(name)) {
+#else
+	if (__dev_get_by_name(&init_net, name)) {
+#endif
+		printk(KERN_INFO "%s: assigned netdevice %s already exists\n",
+				DEVICE_NAME, name);
+
+		*name = 0; /* mark for auto assignment */
+	}
+}
+#endif
+
 //----------------------------------------------------------------------------
 // AF_CAN netdevice: try to reassign netdev name according to user needs
 //----------------------------------------------------------------------------
@@ -290,6 +324,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
 {
   extern char *assign; /* module param: assignment for netdevice names */
   int minor = pdev->nMinor;
+  char *pa = assign;
 
 	DPRINTK(KERN_DEBUG "%s: %s(): minor=%d major=%d (usb major=%d) assign=\"%s\"\n", DEVICE_NAME, __FUNCTION__, minor, pdev->nMajor, USB_MAJOR, assign);
 
@@ -303,7 +338,28 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
 #endif
 #endif
 
-  if (!strncmp(assign, "peak", 4)) {
+#ifdef PCAN_DEV_USES_ALT_NUM
+	if (!strncmp(pa, "devid", 5)) {
+
+		/* 
+		 * if device defines an alternate number, use it instead of 
+		 * its minor
+		 */
+		if (pdev->flags & PCAN_DEV_USES_ALT_NUM) {
+			snprintf(name, IFNAMSIZ-1, CAN_NETDEV_NAME, 
+					(int )pdev->device_alt_num);
+			pcan_check_ifname(name);
+			if (*name)
+				return;
+		}
+
+		pa += 5;
+		if (*pa++ != ',')
+			return;
+	}
+#endif
+
+  if (!strncmp(pa, "peak", 4)) {
 
     // assign=peak
     snprintf(name, IFNAMSIZ-1, CAN_NETDEV_NAME, minor); /* easy: /dev/pcanXX -> canXX */
@@ -313,9 +369,9 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
     // e.g. assign=pcan32:can1,pcan41:can2
 
     int peaknum, netnum;
-    char *ptr = assign;
+    char *ptr = pa;
 
-    while (ptr < (assign + strlen(assign))) {
+    while (ptr < (pa + strlen(pa))) {
       ptr = strchr(ptr, 'p'); /* search first 'p' from pcanXX */
       if (!ptr)
         return; /* no match => quit */
@@ -333,6 +389,10 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
     }
   }
 
+#ifdef PCAN_DEV_USES_ALT_NUM
+	if (*name)
+		pcan_check_ifname(name);
+#else
   if (name[0]) {
     /* check wanted assigned 'name' against existing device names */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
@@ -345,6 +405,7 @@ void pcan_netdev_create_name(char *name, struct pcandev *pdev)
       name[0] = 0; /* mark for auto assignment */
     }
   }
+#endif
 }
 
 //----------------------------------------------------------------------------
@@ -363,7 +424,12 @@ int pcan_netdev_register(struct pcandev *pdev)
 
 #ifdef LINUX_26
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,17,0)
   ndev = alloc_netdev(sizeof(struct pcan_priv), name, pcan_netdev_init);
+#else
+  ndev = alloc_netdev(sizeof(struct pcan_priv), name, NET_NAME_UNKNOWN,
+		  pcan_netdev_init);
+#endif
 
   if (!ndev) {
     printk(KERN_ERR "%s: out of memory\n", DEVICE_NAME);
@@ -437,6 +503,9 @@ int pcan_netdev_unregister(struct pcandev *pdev)
 
   DPRINTK(KERN_DEBUG "%s: %s %s\n", DEVICE_NAME, __FUNCTION__, ndev->name);
 
+  /* mark as unregistered to be sure not to loop here again */
+  pdev->netdev = NULL;
+  
   priv = netdev_priv(ndev);
 
   unregister_netdev(ndev);
@@ -446,8 +515,6 @@ int pcan_netdev_unregister(struct pcandev *pdev)
     kfree(priv);
 #endif
   
-  pdev->netdev = NULL; /* mark as unregistered */
-
   return 0;
 }
 

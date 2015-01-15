@@ -36,7 +36,7 @@
 // pcan_main.c - the starting point of the driver,
 //               init and cleanup and proc interface
 //
-// $Id: pcan_main.c 634 2010-09-26 20:44:05Z khitschler $
+// $Id: pcan_main.c 807 2014-12-09 15:34:11Z stephane $
 //
 //****************************************************************************
 
@@ -213,7 +213,7 @@ void dump_mem(char *prompt, void *p, int l)
 	uint8_t *pc = (uint8_t *)p;
 	int i;
 
-	printk("%s%s: Dumping %s (%d bytes):\n", 
+	printk("%s%s: Dumping %s (%d bytes):\n",
 	       kern, DEVICE_NAME, prompt?prompt:"memory", l);
 	for (i=0; i < l; )
 	{
@@ -346,6 +346,9 @@ void timeval2pcan(struct timeval *tv, u32 *msecs, u16 *usecs)
  */
 void pcan_add_device_in_list(struct pcandev *dev)
 {
+#ifdef DEBUG
+	pr_info("%s: %s(%p)\n", DEVICE_NAME, __func__, dev);
+#endif
 	mutex_lock(&pcan_drv.devices_lock);
 	list_add_tail(&dev->list, &pcan_drv.devices);
 	pcan_drv.wDeviceCount++;
@@ -357,11 +360,37 @@ void pcan_add_device_in_list(struct pcandev *dev)
  */
 void pcan_del_device_from_list(struct pcandev *dev)
 {
+#ifdef DEBUG
+	pr_info("%s: %s(%p)\n", DEVICE_NAME, __func__, dev);
+#endif
 	mutex_lock(&pcan_drv.devices_lock);
 	if (pcan_drv.wDeviceCount)
 		pcan_drv.wDeviceCount--;
 	list_del(&dev->list);
 	mutex_unlock(&pcan_drv.devices_lock);
+}
+
+/*
+ * Safe check whether a device is linked in the pcan driver devices list.
+ */
+int pcan_is_device_in_list(struct pcandev *dev)
+{
+	struct list_head *ptr;
+	int found = 0;
+
+#ifdef DEBUG
+	pr_info("%s: %s(%p)\n", DEVICE_NAME, __func__, dev);
+#endif
+	mutex_lock(&pcan_drv.devices_lock);
+	list_for_each(ptr, &pcan_drv.devices)
+		if (dev == (struct pcandev *)ptr) {
+			found = 1;
+			break;
+		}
+
+	mutex_unlock(&pcan_drv.devices_lock);
+
+	return found;
 }
 
 //----------------------------------------------------------------------------
@@ -378,41 +407,41 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count,
 	struct pcandev *dev;
 	struct list_head *ptr;
 
-	DPRINTK(KERN_DEBUG "%s: pcan_read_procmem()\n", DEVICE_NAME);
+	//DPRINTK(KERN_DEBUG "%s: pcan_read_procmem()\n", DEVICE_NAME);
 
 #ifdef CREATE_PROC_ENTRY_DEPRECATED
 	seq_printf(m, "\n");
-	seq_printf(m, 
+	seq_printf(m,
 		"*------------- PEAK-System CAN interfaces (www.peak-system.com) -------------\n");
-  	seq_printf(m, 
-		"*------------- %s (%s) %s %s --------------\n", 
+  	seq_printf(m,
+		"*------------- %s (%s) %s %s --------------\n",
 		pcan_drv.szVersionString, CURRENT_VERSIONSTRING,
 		__DATE__, __TIME__);
 	seq_printf(m, "%s\n", config);
 	seq_printf(m, "*--------------------- %d interfaces @ major %03d found -----------------------\n",
 		pcan_drv.wDeviceCount, pcan_drv.nMajor);
 	seq_printf(m,
-		"*n -type- ndev --base-- irq --btr- --read-- --write- --irqs-- -errors- status\n");
+		"*n -type- -ndev- --base-- irq --btr- --read-- --write- --irqs-- -errors- status\n");
 #else
 	len += sprintf(page + len, "\n");
-	len += sprintf(page + len, 
+	len += sprintf(page + len,
 		"*------------- PEAK-System CAN interfaces (www.peak-system.com) -------------\n");
 	len += sprintf(page + len,
 		"*------------- %s (%s) %s %s --------------\n",
 		pcan_drv.szVersionString, CURRENT_VERSIONSTRING,
 		__DATE__, __TIME__);
 	len += sprintf(page + len, "%s\n", config);
-	len += sprintf(page + len, 
+	len += sprintf(page + len,
 		"*--------------------- %d interfaces @ major %03d found -----------------------\n",
 		pcan_drv.wDeviceCount, pcan_drv.nMajor);
-	len += sprintf(page + len, 
-		"*n -type- ndev --base-- irq --btr- --read-- --write- --irqs-- -errors- status\n");
+	len += sprintf(page + len,
+		"*n -type- -ndev- --base-- irq --btr- --read-- --write- --irqs-- -errors- status\n");
 #endif
 	/* enter critical section (get mutex) */
 	mutex_lock(&pcan_drv.devices_lock);
 
 	/* loop trough my devices */
-	for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; 
+	for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices;
 							ptr = ptr->next) {
 		u32 dwPort = 0;
 		u16 wIrq   = 0;
@@ -439,7 +468,9 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count,
 			wIrq = dev->port.pci.wIrq;
 			break;
 		case HW_USB:
+		case HW_USB_FD:
 		case HW_USB_PRO:
+		case HW_USB_PRO_FD:
 #ifdef USB_SUPPORT
 			/* get serial number of device */
 			if (dev->ucPhysicallyInstalled) {
@@ -463,15 +494,15 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count,
 		}
 
 #ifdef NETDEV_SUPPORT
-		stats = (dev->netdev) ? 
+		stats = (dev->netdev) ?
 				pcan_netdev_get_stats(dev->netdev) : NULL;
 #endif
 #ifdef CREATE_PROC_ENTRY_DEPRECATED
 		seq_printf(m,
 #else
-		len += sprintf(page + len, 
+		len += sprintf(page + len,
 #endif
-		"%2d %6s %4s %08x %03d 0x%04x %08lx %08lx %08x %08x 0x%04x\n",
+		"%2d %6s %6s %08x %03d 0x%04x %08lx %08lx %08x %08x 0x%04x\n",
 			minor,
 			dev->type,
 #ifdef NETDEV_SUPPORT
@@ -484,7 +515,7 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count,
 			dev->wBTR0BTR1,
 #ifdef NETDEV_SUPPORT
 			(stats) ? stats->rx_packets : 0,
-			dev->writeFifo.dwTotal + 
+			dev->writeFifo.dwTotal +
 					((stats) ? stats->tx_packets : 0),
 #else
 			(unsigned long)dev->readFifo.dwTotal,
@@ -507,6 +538,56 @@ static int pcan_read_procmem(char *page, char **start, off_t offset, int count,
 	return len;
 #endif
 }
+
+#ifdef CONFIG_SYSFS
+int pcan_sysfs_add_attr(struct device *dev, struct attribute *attr)
+{
+	return sysfs_add_file_to_group(&dev->kobj, attr, NULL);
+}
+
+int pcan_sysfs_add_attrs(struct device *dev, struct attribute **attrs)
+{
+	int err = 0;
+	struct attribute **ppa;
+
+#ifdef DEBUG
+	printk(KERN_INFO "%s(%p=\"%s\")\n", __func__, dev, dev->kobj.name);
+#endif
+	for (ppa = attrs; *ppa; ppa++) {
+		err = pcan_sysfs_add_attr(dev, *ppa);
+		if (err) {
+			printk(KERN_ERR
+				"failed to add \"%s\" to \"%s\" (err %d)\n",
+				(*ppa)->name, dev->kobj.name, err);
+			break;
+		}
+	}
+
+	return err;
+}
+
+void pcan_sysfs_del_attr(struct device *dev, struct attribute *attr)
+{
+	sysfs_remove_file_from_group(&dev->kobj, attr, NULL);
+}
+
+void pcan_sysfs_del_attrs(struct device *dev, struct attribute **attrs)
+{
+	struct attribute **ppa;
+
+#ifdef DEBUG
+	printk(KERN_INFO "%s(%p=\"%s\")\n", __func__, dev, dev->kobj.name);
+#endif
+	for (ppa = attrs; *ppa; ppa++)
+		pcan_sysfs_del_attr(dev, *ppa);
+}
+#else
+int pcan_sysfs_add_attrs(struct device *dev, struct attribute **attrs)
+{
+	return 0;
+}
+void pcan_sysfs_del_attrs(struct device *dev, struct attribute **attrs) {}
+#endif
 
 #ifdef CREATE_PROC_ENTRY_DEPRECATED
 static int open_callback(struct inode *inode, struct file *file)
@@ -557,7 +638,7 @@ void cleanup_module(void)
 
 	switch (pcan_drv.wInitStep) {
 
-	case 4: 
+	case 4:
 		remove_proc_entry(DEVICE_NAME, NULL);
 	case 3:
 		DEV_UNREGISTER();
@@ -628,7 +709,7 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
 	atomic_set(&dev->DataSendReady, 1);
 
 	/* init fifos */
-	pcan_fifo_init(&dev->readFifo, &dev->rMsg[0], 
+	pcan_fifo_init(&dev->readFifo, &dev->rMsg[0],
 			&dev->rMsg[READ_MESSAGE_COUNT - 1],
 			READ_MESSAGE_COUNT,  sizeof(TPCANRdMsg));
 	pcan_fifo_init(&dev->writeFifo, &dev->wMsg[0],
@@ -637,6 +718,10 @@ void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType)
 
 	INIT_LOCK(&dev->wlock);
 	INIT_LOCK(&dev->isr_lock);
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+	dev->flags &= ~PCAN_DEV_USES_ALT_NUM;
+#endif
 }
 
 /*----------------------------------------------------------------------------
@@ -652,13 +737,13 @@ static int make_legacy_devices(void)
 	for (i = 0; ((i < 8) && (type[i] != NULL)); i++) {
 #ifdef ISA_SUPPORT
 		if (!strncmp(type[i], "isa", 4))
-			result = pcan_create_isa_devices(type[i], 
+			result = pcan_create_isa_devices(type[i],
 								io[i], irq[i]);
 #endif
 
 #ifdef DONGLE_SUPPORT
 		if (!strncmp(type[i], "sp", 4) || !strncmp(type[i], "epp", 4))
-			result = pcan_create_dongle_devices(type[i], 
+			result = pcan_create_dongle_devices(type[i],
 								io[i], irq[i]);
 #endif
 
@@ -704,12 +789,12 @@ int init_module(void)
 	printk(KERN_INFO "%s: DEBUG is switched on\n", DEVICE_NAME);
 #endif
 
-	/* 
+	/*
 	 * Copy the centered string only one time and use sizeof() for
 	 * compiletime value calculation and optimisation. Also ensure
 	 * to have a valid current_config and that it fits into config[]
 	 */
-	if ((sizeof(current_config) > 3) && 
+	if ((sizeof(current_config) > 3) &&
 				(sizeof(config) > sizeof(current_config)))
 		strncpy(config + (sizeof(config)-sizeof(current_config))/2,
 				current_config, sizeof(current_config)-1);
@@ -790,7 +875,7 @@ int init_module(void)
 	}
 #else
 	/* create the proc entry */
-	if (create_proc_read_entry(DEVICE_NAME, 0, NULL, 
+	if (create_proc_read_entry(DEVICE_NAME, 0, NULL,
 					pcan_read_procmem, NULL) == NULL) {
 		/* maybe wrong if there is no proc filesystem configured */
 		result = -ENODEV;

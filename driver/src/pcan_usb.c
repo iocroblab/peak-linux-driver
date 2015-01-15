@@ -30,7 +30,7 @@
 //
 // pcan_usb.c - the inner parts for pcan-usb support
 //
-// $Id: pcan_usb.c 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_usb.c 807 2014-12-09 15:34:11Z stephane $
 //
 // 2011-08-22 SGr
 // - pcan_usb_cleanup(NEW): add the sending of the bus off request in cleanup
@@ -129,6 +129,7 @@ typedef struct
 
 //****************************************************************************
 // GLOBALS
+extern int pcan_kill_sync_urb(struct urb *urb);
 
 //****************************************************************************
 // LOCALS
@@ -509,17 +510,33 @@ static int pcan_usb_setCANOff(struct pcandev *dev)
 	err = pcan_usb_setcontrol_urb(dev, 3, 2, 0, dummy,
 	                  dummy, dummy, dummy, dummy, dummy, dummy,
 	                  dummy, dummy, dummy, dummy, dummy, dummy);
-	if (1) {
+
+	/* or if (err != -ENODEV) { */
+	if (dev->ucPhysicallyInstalled) {
 		struct pcan_usb_interface *usb_if = dev->port.usb.usb_if;
 
 		//pr_err("%s: PCAN-USB fw 2.8 workaround\n", DEVICE_NAME);
-
-		usb_clear_halt(usb_if->usb_dev, 
+		DPRINTK(KERN_DEBUG "%s: %s fw 2.8 workaround\n",
+				DEVICE_NAME, usb_if->adapter_name);
+		err = usb_clear_halt(usb_if->usb_dev,
 				usb_sndbulkpipe(usb_if->usb_dev,
 						usb_if->pipe_cmd_out.ucNumber));
-		usb_clear_halt(usb_if->usb_dev, 
+#ifdef DEBUG
+		if (err)
+			pr_err("%s: %s(): usb_clear_halt(1) failed err %d\n",
+				DEVICE_NAME, __FUNCTION__, err);
+#endif
+
+		err = usb_clear_halt(usb_if->usb_dev,
 				usb_rcvbulkpipe(usb_if->usb_dev,
 						usb_if->pipe_cmd_in.ucNumber));
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: %s(): usb_clear_halt(2) failed err %d\n",
+				DEVICE_NAME, __FUNCTION__, err);
+			return err;
+		}
+
 		mdelay(50);
 	}
 
@@ -638,6 +655,13 @@ static int pcan_usb_getDeviceNr(struct pcandev *dev, u32 *pdwDeviceNr)
 
 	DPRINTK(KERN_DEBUG "%s: DeviceNr = 0x%x\n", DEVICE_NAME, *pdwDeviceNr);
 
+#ifdef PCAN_DEV_USES_ALT_NUM
+        if (!err && (*pucDeviceNr != 255)) {
+		dev->device_alt_num = *pucDeviceNr;
+		dev->flags |= PCAN_DEV_USES_ALT_NUM;
+	}
+#endif
+
 	return err;
 }
 
@@ -651,22 +675,6 @@ static int pcan_usb_setDeviceNr(struct pcandev *dev, u32 dwDeviceNr)
 	                 dummy, dummy, dummy, dummy, dummy, dummy,
 	                 dummy, dummy, dummy, dummy, dummy, dummy);
 }
-
-static int pcan_usb_setSNR(struct pcan_usb_interface *usb_if, uint32_t dwSNR)
-{
-	struct pcandev *dev = &usb_if->dev[0];
-	u8  dummy  = 0;
-	ULCONV SNR;
-
-	SNR.ul = dwSNR;
-
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
-
-	return pcan_usb_setcontrol_urb(dev, 6, 2, SNR.uc[3], SNR.uc[2], SNR.uc[1], SNR.uc[0],
-			                 dummy, dummy, dummy, dummy, dummy,
-			                 dummy, dummy, dummy, dummy, dummy);
-}
-
 
 static int pcan_usb_setExtVCCOff(struct pcandev *dev)
 {
@@ -769,7 +777,11 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 	// opened by any user (USB-PRO needs handling such messages)
 	// Thus, MUST check here if any path has been opened before posting any
 	// messages
-	if (dev->nOpenPaths <= 0) return 0;
+	if (dev->nOpenPaths <= 0) {
+		DPRINTK(KERN_DEBUG "%s: pcan_usb_DecodeMessage(%p, %d): ignored (nOpenPaths=%d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength, dev->nOpenPaths);
+		buffer_dump(ucMsgPtr, lCurrentLength/16+1);
+		return 0;
+	}
 
 	//DPRINTK(KERN_DEBUG "%s: pcan_usb_DecodeMessage(%p, %d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength);
 	//dump_mem("received buffer", ucMsgPtr, lCurrentLength);
@@ -1247,13 +1259,23 @@ static int pcan_usb_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnData
  *
  * Last chance to submit URB before drievr removal.
  */
-static
-void pcan_usb_cleanup(struct pcandev *dev)
+static void pcan_usb_cleanup(struct pcandev *dev)
 {
 	/* Set CAN bus off here now since we're sure that the request will be */
 	/* sent to the usb module */
 	pcan_usb_setCANOff(dev);
 }
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+static int pcan_usb_ctrl_init(struct pcandev *dev)
+{
+	struct pcan_usb_interface *usb_if = dev->port.usb.usb_if;
+
+	pr_info("%s: %s channel device number=%u\n", 
+		DEVICE_NAME, usb_if->adapter_name, dev->device_alt_num);
+	return 0;
+}
+#endif
 
 /*
  * int pcan_usb_init(struct pcan_usb_interface *usb_if)
@@ -1262,16 +1284,26 @@ void pcan_usb_cleanup(struct pcandev *dev)
  */
 int pcan_usb_init(struct pcan_usb_interface *usb_if)
 {
+	usb_if->adapter_name = "PCAN-USB";
+#ifdef PCAN_DEV_USES_ALT_NUM
+	usb_if->device_ctrl_init = pcan_usb_ctrl_init;
+#endif
 	usb_if->device_ctrl_cleanup = pcan_usb_cleanup;
 	usb_if->device_ctrl_open = pcan_usb_Init;
 	usb_if->device_ctrl_set_bus_on = pcan_usb_setCANOn;
 	usb_if->device_ctrl_set_bus_off = pcan_usb_setCANOff;
-	usb_if->device_set_snr = pcan_usb_setSNR;
 	usb_if->device_get_snr = pcan_usb_getSNR;
 	usb_if->device_ctrl_set_dnr = pcan_usb_setDeviceNr;
 	usb_if->device_ctrl_get_dnr = pcan_usb_getDeviceNr;
 	usb_if->device_ctrl_msg_encode = pcan_usb_EncodeMessage;
 	usb_if->device_msg_decode = pcan_usb_DecodeMessage;
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+	/*
+	 * MUST initialize alt_num here (before creating devices) for Udev rules
+	 */
+	usb_if->dev[0].device_alt_num = 0xff;
+#endif
 
 #if 0
 	/* check do_div() macro */

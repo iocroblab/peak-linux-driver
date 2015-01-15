@@ -133,3 +133,82 @@
 
 2013-08-14 - 7.9
 - official release tested with 3.8 and 3.10 kernels
+
+2013-10-07 - 7.9.1-beta
+- added new PCI ID 0x0009 (PCAN-PCI Express OEM)
+
+2013-10-10 - 7.9.2-beta
+- handle USB error like BUSOFF to force application to restart
+
+2013-10-16 - 7.10.0-beta
+- handle usb core error in read callback (interrupt context) by properly 
+  closing the device instead of ignoring the error
+- handle USB error like BUSOFF to force application to restart
+- remove "PEAK-Systems" ending "s" to MODULE_DESCRIPTION string 
+
+2014-01-21 - 7.10 - content
+- official release tested with 3.10 kernel
+
+2014-04-30 - 7.11 - content
+- fix reading of Kernel version in driver's Malefile, especially when the 
+  version number doesn't match x.y.z strict formats. Now, versions like
+  x.y, x.0y, x.y-name, x.y.0z, x.y.z-name are correctly handled.
+- remove ability to set the serial number from userspace and from the driver,
+  for PCAN-USB and PCAN-USB Pro adapters.
+- fix errno handling in pcan-settings.c
+- update Documentation with infos about linux-can mainline drivers and fix
+  typos and (old) berlios.de references
+
+2014-05-14 - 7.11.1 - content
+- moved physically installed processing out of the USB interrupt context.
+
+2014-05-19 - 7.12-beta - content
+- chardev applications tasks are now unblocked when waiting for event on a
+  device that has been unplugged (errno = ENODEV).
+
+2014-07-10 - 7.12.1-beta - content
+- rework a few things to detect the spurious interrupt problem with RT patches
+  kernels
+- added two new modules parameters (irqmaxloop and irqmaxrmsg)
+
+2014-07-21 - 7.12 - content
+- moved physically installed processing out of the USB interrupt context.
+- fix "Kernel NULL pointer dereference" occuring with netdev under high busload
+- chardev applications tasks are now unblocked when waiting for event on a
+  device that has been unplugged (errno = ENODEV).
+- rework a few things to detect the spurious interrupt problem with RT patches
+  kernels.
+- added two new module parameters (irqmaxloop and irqmaxrmsg) to better control
+  how much time should pcan pass in each SJA1000 IRQ handler and how much CAN
+  message it can read from each rx queue (default value are 1 and 8 resp.).
+- reworked SJA1000 ISR to save time in case of error condition
+- fix in-tree compilation issue by using EXTRA_CFLAGS in driver's Makefile
+  instead of _CFLAGS.
+
+2014-08-22 - 7.12.3-beta - content
+- fix udev rules for correct naming of /dev/pcanxx symlinks to USB CAN devices:
+  USB CAN devices /dev/pcanxx names start from xx=32, what ever 
+  CONFIG_USB_DYNAMIC_MINORS Kernel configuration is.
+- add some attributes to /sys/devices tree for helping Udev in naming PCAN
+  devices (see new udev/455-pcan.rules) especially "pcan_devid" that enables to
+  name /dev/pcanxxx nodes with a number read from the hard-coded Device Id value
+- fix pcan-settings tool to be able to handle 32-bits device ids
+- add new value "devid" to "assign=" module parameter to be able to use the 
+  devid for "canX" names too.
+
+2014-08-25 - 7.12.4-beta - content
+- fix struct pcandev new flag field initialization in pcan_soft_init()
+
+2014-09-02 - 7.12.4-beta - content
+- fix regression in usb core
+
+2014-09-16 - 7.12.6-beta - content
+- support of 3.17 
+- support of PCAN-Express Card 34
+
+2014-10-17 - 7.13 - content
+- Release version
+
+2014-12-19 - 7.14 - content
+- add suport for PCAN-USB FD and PCAN-USB-Pro FD adapters for running CAN 2.0b
+  modes only.

@@ -32,7 +32,7 @@
 // system dependend parts to handle pcan-pccard
 // special code for kernels greater and equal than 2.6.17
 //
-// $Id: pcan_pccard-2.6.17.c 628 2010-08-12 19:59:31Z khitschler $
+// $Id: pcan_pccard-2.6.17.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 
