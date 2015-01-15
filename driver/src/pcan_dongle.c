@@ -34,7 +34,7 @@
 //
 // all parts to handle the interface specific parts of pcan-dongle
 //
-// $Id: pcan_dongle.c 606 2010-02-10 19:47:16Z ohartkopp $
+// $Id: pcan_dongle.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 
@@ -451,8 +451,8 @@ int pcan_create_dongle_devices(char *type, u32 io, u16 irq)
   }
   else
   {
-    list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list        
-    pcan_drv.wDeviceCount++;
+  	/* add this device to the list */
+	pcan_add_device_in_list(dev);
   }
 
   fail:

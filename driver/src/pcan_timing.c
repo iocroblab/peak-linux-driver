@@ -69,21 +69,16 @@ struct pcan_timing_parameters
 };
 
 /* Public timing capabilites */
-const struct pcan_timing_capabilities sja2010_capabilities =
-{
-   .max_prescaler = 1024,
-   .max_tseg1 = 16,
-   .max_tseg2 = 8,
-   .max_sjw = 4,
-   .intern_prescaler = 1
-};
-
 const struct pcan_timing_capabilities sja1000_capabilities =
 {
-   .max_prescaler = 128,
+   .max_brp = 128,
+   .min_brp = 1,
    .max_tseg1 = 16,
+   .min_tseg1 = 2,	/* constant for v <= 7.13 */
    .max_tseg2 = 8,
+   .min_tseg2 = 2,	/* constant for v <= 7.13 */
    .max_sjw = 4,
+   .min_sjw = 1,
    .intern_prescaler = 2
 };
 
@@ -320,12 +315,12 @@ int pcan_timing_convert_br_settings(const struct pcan_timing_capabilities *cap,
 #endif
 
 		// prescale==0: baud rate can not be constructed.
-		if (  (cur_baudrate.prescaler < 1) 
-		   || (cur_baudrate.prescaler > cap->max_prescaler)
+		if (  (cur_baudrate.prescaler < cap->min_brp)
+		   || (cur_baudrate.prescaler > cap->max_brp)
 		   )
 		{
-			DPRINTK(KERN_DEBUG "%s: %s(): loop1: cap->max_prescaler=%u\n", 
-			        DEVICE_NAME, __FUNCTION__, cap->max_prescaler);
+			DPRINTK(KERN_DEBUG "%s: %s(): loop1: cap->max_brp=%u\n", 
+			        DEVICE_NAME, __FUNCTION__, cap->max_brp);
 			__debug_pcan_timing_parameters(cur_baudrate);
 			continue;
 		}
@@ -377,7 +372,8 @@ int pcan_timing_convert_br_settings(const struct pcan_timing_capabilities *cap,
 			continue;
 		}
 
-		if (  (cur_baudrate.tseg1 < 2)
+		/* if (  (cur_baudrate.tseg1 < 2) */
+		if (  (cur_baudrate.tseg1 < cap->min_tseg1)
 		   || (cur_baudrate.tseg1 > cap->max_tseg1)
 		   )
 		{
@@ -387,8 +383,8 @@ int pcan_timing_convert_br_settings(const struct pcan_timing_capabilities *cap,
 			continue;
 		}
 
-
-		if (  (cur_baudrate.tseg2 < 2)
+		/* if (  (cur_baudrate.tseg2 < 2) */
+		if (  (cur_baudrate.tseg2 < cap->min_tseg2)
 		   || (cur_baudrate.tseg2 > cap->max_tseg2)
 		   )
 		{

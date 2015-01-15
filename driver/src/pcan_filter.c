@@ -25,7 +25,7 @@
 //
 // pcan_filter.c - all about CAN message filtering
 //
-// $Id: pcan_filter.c 600 2009-11-17 20:44:05Z khitschler $
+// $Id: pcan_filter.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

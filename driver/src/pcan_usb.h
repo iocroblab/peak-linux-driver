@@ -32,7 +32,7 @@
 //
 // pcan_usb.h - the inner usb parts header for pcan-usb support
 //
-// $Id: pcan_usb.h 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_usb.h 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 

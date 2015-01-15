@@ -32,7 +32,7 @@
 //
 // all parts of the isa hardware for pcan-isa devices
 //
-// $Id: pcan_isa.c 606 2010-02-10 19:47:16Z ohartkopp $
+// $Id: pcan_isa.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 
@@ -209,8 +209,9 @@ int pcan_create_isa_devices(char* type, u32 io, u16 irq)
   else
   {
     dev->ucPhysicallyInstalled = 1;
-    list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
-    pcan_drv.wDeviceCount++;
+
+	/* add this device to the list */
+	pcan_add_device_in_list(dev);
   }        
   
   fail:

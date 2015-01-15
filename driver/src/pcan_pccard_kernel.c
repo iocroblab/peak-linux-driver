@@ -31,7 +31,7 @@
 //
 // all parts to handle the interface specific parts of pcan-pccard
 //
-// $Id: pcan_pccard_kernel.c 628 2010-08-12 19:59:31Z khitschler $
+// $Id: pcan_pccard_kernel.c 753 2014-01-21 10:45:03Z stephane $
 //
 //****************************************************************************
 
@@ -472,10 +472,9 @@ static int pccard_cleanup(struct pcandev *dev)
               #ifdef NETDEV_SUPPORT
               pcan_netdev_unregister(dev);
               #endif
-      case 3: pcan_drv.wDeviceCount--;
-              pccard_devices--;
+      case 3: pccard_devices--;
       case 2: dev->ucPhysicallyInstalled = 0;
-              list_del(&dev->list);
+	      pcan_del_device_from_list(dev);
       case 1:
               #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,8)
               DPRINTK(KERN_DEBUG "%s: release_region(PCCARD_PORT_SIZE)\n", DEVICE_NAME);
@@ -603,11 +602,12 @@ static struct pcandev *pccard_create_single_device(PCAN_PCCARD *card, int nChann
 
   // add into list of devices and assign the device as plugged in
   dev->ucPhysicallyInstalled = 1;
-  list_add_tail(&dev->list, &pcan_drv.devices);  // add this device to the list
+
+	/* add this device to the list */
+	pcan_add_device_in_list(dev);
+
   dev->wInitStep = 2;
 
-  // increment device counts
-  pcan_drv.wDeviceCount++;
   pccard_devices++;
   dev->wInitStep = 3;
 

@@ -45,3 +45,170 @@
   customer that brought some warning on 64-bits compilation.
 - the 2011-07-27 delivery should not be used and will be renamed in svn repo
   into "Release_20110727_n-7.3-dontuse"
+
+2011-09-12 - 7.4 - content:
+- remove any references to selecttest into test/Makefile
+- fix USB-PRO on odd number of frames sent in between insmod/rmmod cycle
+- add cancelation of calibration message on device removing 
+- move can off messages sending on channel closing rather than on device 
+  removing
+
+2011-10-05 - 7.4.1 - content:
+- fix usb-pro packet size issue against receiving messages with size greater 
+  than 512 bytes
+
+2011-10-06 - 7.4.2 - content:
+- handle specifically USB-PRO error status and record fragmentation w/ packet
+  size < 1024 bytes
+- add error messages in pci probing to ease debugging
+- handle big/little endian in USB-PRO message coding/decoding
+
+2012-01-18 - 7.5 - content:
+- handle new PCAN-miniPCI-Express
+- fix potential issue in PCIeC driver by using a delayed work instead of a timer
+  to control the leds (i2c_transfer() may sleep because of underlying drivers).
+- fix some crashes when PCIeC support was requested
+- fix driver build until v3.03
+- fix potential infinite loop in usb driver part
+- fix wrong /dev/NULL ref in driver Makefile 
+- make install now adds peak_xxx mainline drivers to system blacklist (see 
+  udev/blacklist-peak.conf) and forces their unloading from memory
+- fix potential issue with PCAN-USB fw 2.8
+- add "uninstall" target to Makefiles to properly remove driver from the system
+
+2012-05-22 - 7.6 - content:
+- add support for some new PCI devices
+- remove unused MPCIE_SUPPORT compilation option from Makefile
+- fix compilation issue with old kernel versions and the usage of 
+  net_ratelimit()
+
+2012-07-26 - 7.7 - content:
+- fix compilation issues with Kernel versions until 3.5 (Thx Oliver H. ;-)
+- PCAN-USB Pro: fix compilation issue with undefined symbol "pr_err()" and
+(very) old Kernels (2.6.22).
+
+2013-01-31 - 7.8 - content:
+- handle "version.h" moving in Kernel 3.7+
+- pcan_netdev.c: add support for Kernel 3.9+ linux-can
+- add DESTDIR support in driver/lib/test Makefile
+- handle peak_pci removing according to Kernel version (< 3.4 crash when rmmod)
+- add build date/time in /proc/pcan display
+- dev_register(pcan_main_linux.c): add forgotten HW_ISA_SJA type when creating
+  and removing nodes with UDEV_SUPPORT
+- pcan_usb_setCANOff(pcan_usb.c): always force usb_clear_halt() and mdelay(50)
+  after CAN=off: this fixes an issue writing a single msg then closing the 
+  device next.
+- transmittest.cpp: fix wrong errno usage calling CAN_Write
+- receivetest.c: fix wrong errno usage calling LINUX_CAN_Read
+
+2013-04-04 - 7.8.1 - content:
+- src/sja1000.c: remove useless test on RECEIVE_MSG_COUNTER
+
+2013-04-15 - 7.8.2 - content:
+- add mutex to control access to devices list; add two functions to safe 
+  add/del items to/from this list and rescan all sources to use these functions,
+  or at least, to access devices list with respect to  mutual exclusion.
+- src/sja1000.c: reverted to 7.8
+- src/pcan_main.c: rework remove_dev_list() to remove device EVEN if no
+  cleanup() callback is regigistered (potential memory cosumption)
+
+2013-04-16 - 7.8.3 - content:
+- src/pcan_main.c: consolidate pcan_read_procmem() against NULL "netdev" pointer
+  access, when NETDEV_SUPPORT is defined
+- add mutex lock/unlock around all other device list accesses (opportunity to 
+  remove dust in the C coding style of some files)
+
+2013-07-03 - 7.8.4 - content:
+- handle /proc/pcan read access in a more modern way (create_proc_entry() 
+  deprecated since 3.9)
+
+2013-08-07 - 7.9-beta
+- src/pcan_usb.c: handle the fact that DLC field in PCAN-USB protocol can 
+  be > 8. For the moment, 'dlc' fields in user C structs is not!
+
+2013-08-13 - 7.9-local
+- fix bug in first column of /proc/pcan when displaying USB device can channel
+- also moved to more efficient way of filling and returning struct objects in
+  all "pcan_ioctl_diag_xxx()" functions
+
+2013-08-14 - 7.9
+- official release tested with 3.8 and 3.10 kernels
+
+2013-10-07 - 7.9.1-beta
+- added new PCI ID 0x0009 (PCAN-PCI Express OEM)
+
+2013-10-10 - 7.9.2-beta
+- handle USB error like BUSOFF to force application to restart
+
+2013-10-16 - 7.10.0-beta
+- handle usb core error in read callback (interrupt context) by properly 
+  closing the device instead of ignoring the error
+- handle USB error like BUSOFF to force application to restart
+- remove "PEAK-Systems" ending "s" to MODULE_DESCRIPTION string 
+
+2014-01-21 - 7.10 - content
+- official release tested with 3.10 kernel
+
+2014-04-30 - 7.11 - content
+- fix reading of Kernel version in driver's Malefile, especially when the 
+  version number doesn't match x.y.z strict formats. Now, versions like
+  x.y, x.0y, x.y-name, x.y.0z, x.y.z-name are correctly handled.
+- remove ability to set the serial number from userspace and from the driver,
+  for PCAN-USB and PCAN-USB Pro adapters.
+- fix errno handling in pcan-settings.c
+- update Documentation with infos about linux-can mainline drivers and fix
+  typos and (old) berlios.de references
+
+2014-05-14 - 7.11.1 - content
+- moved physically installed processing out of the USB interrupt context.
+
+2014-05-19 - 7.12-beta - content
+- chardev applications tasks are now unblocked when waiting for event on a
+  device that has been unplugged (errno = ENODEV).
+
+2014-07-10 - 7.12.1-beta - content
+- rework a few things to detect the spurious interrupt problem with RT patches
+  kernels
+- added two new modules parameters (irqmaxloop and irqmaxrmsg)
+
+2014-07-21 - 7.12 - content
+- moved physically installed processing out of the USB interrupt context.
+- fix "Kernel NULL pointer dereference" occuring with netdev under high busload
+- chardev applications tasks are now unblocked when waiting for event on a
+  device that has been unplugged (errno = ENODEV).
+- rework a few things to detect the spurious interrupt problem with RT patches
+  kernels.
+- added two new module parameters (irqmaxloop and irqmaxrmsg) to better control
+  how much time should pcan pass in each SJA1000 IRQ handler and how much CAN
+  message it can read from each rx queue (default value are 1 and 8 resp.).
+- reworked SJA1000 ISR to save time in case of error condition
+- fix in-tree compilation issue by using EXTRA_CFLAGS in driver's Makefile
+  instead of _CFLAGS.
+
+2014-08-22 - 7.12.3-beta - content
+- fix udev rules for correct naming of /dev/pcanxx symlinks to USB CAN devices:
+  USB CAN devices /dev/pcanxx names start from xx=32, what ever 
+  CONFIG_USB_DYNAMIC_MINORS Kernel configuration is.
+- add some attributes to /sys/devices tree for helping Udev in naming PCAN
+  devices (see new udev/455-pcan.rules) especially "pcan_devid" that enables to
+  name /dev/pcanxxx nodes with a number read from the hard-coded Device Id value
+- fix pcan-settings tool to be able to handle 32-bits device ids
+- add new value "devid" to "assign=" module parameter to be able to use the 
+  devid for "canX" names too.
+
+2014-08-25 - 7.12.4-beta - content
+- fix struct pcandev new flag field initialization in pcan_soft_init()
+
+2014-09-02 - 7.12.4-beta - content
+- fix regression in usb core
+
+2014-09-16 - 7.12.6-beta - content
+- support of 3.17 
+- support of PCAN-Express Card 34
+
+2014-10-17 - 7.13 - content
+- Release version
+
+2014-12-19 - 7.14 - content
+- add suport for PCAN-USB FD and PCAN-USB-Pro FD adapters for running CAN 2.0b
+  modes only.

@@ -35,7 +35,7 @@
 // global defines to include in all files this module is made of
 // ! this must always the 1st include in all files !
 //
-// $Id: pcan_common.h 637 2010-10-24 20:51:10Z khitschler $
+// $Id: pcan_common.h 811 2014-12-19 13:13:35Z stephane $
 //
 //****************************************************************************
 
@@ -50,6 +50,7 @@
 
 #include <linux/version.h>  // if this file is not found: please look @ /boot/vmlinuz.version.h and make a symlink
 
+#include <linux/module.h>
 #include <linux/stringify.h>
 
 // support for MODVERSIONS
@@ -202,9 +203,9 @@ int ___request_region(unsigned long from, unsigned long length, const char *name
 //----------------------------------------------------------------------------
 // set here the current release of the driver 'Release_date_nr' synchronous
 // with SVN
-#define CURRENT_RELEASE "Release_20110728_n"  // $name$
+#define CURRENT_RELEASE "Release_20141219_n"  // $name$
 #define PCAN_VERSION_MAJOR             7
-#define PCAN_VERSION_MINOR             3
+#define PCAN_VERSION_MINOR             14
 #define PCAN_VERSION_SUBMINOR          0
 #define CURRENT_VERSIONSTRING          __stringify(PCAN_VERSION_MAJOR)"."__stringify(PCAN_VERSION_MINOR)"."__stringify(PCAN_VERSION_SUBMINOR)
 

@@ -38,7 +38,7 @@
 //
 // pcan_main.h - global defines to include in all files this module is made of
 //
-// $Id: pcan_main.h 634 2010-09-26 20:44:05Z khitschler $
+// $Id: pcan_main.h 807 2014-12-09 15:34:11Z stephane $
 //
 //****************************************************************************
 
@@ -204,9 +204,14 @@ typedef struct
 	u8         VCCenable;                                    // reflection of VCCEN
 	u8         PCA9553_LS0Shadow;                            // Shadow register to hold the state of the LEDs
 	int        run_activity_timer_cyclic;                    // a flag to synchronize stop conditions
-	struct     timer_list activity_timer;                    // to scan for activity, set the time
+	struct     delayed_work activity_timer;                  // to scan for activity, set the time
 } PCAN_PCIEC_CARD;
 #endif
+
+struct pcan_msi {
+	int	msi_requested;
+	int	msi_assigned;
+};
 
 typedef struct
 {
@@ -217,6 +222,7 @@ typedef struct
 	u16  wIrq;                                               // the associated irq level
 	int  nChannel;                                           // associated channel of the card - channel #0 is special
 	struct pci_dev *pciDev;                                  // remember the hosting PCI card
+	struct pcan_msi msi;
 #ifdef PCIEC_SUPPORT
 	PCAN_PCIEC_CARD *card;                                   // point to a card structure
 #endif
@@ -292,6 +298,8 @@ typedef struct
 	u16 wDataSz;                        // supported max data transfer length
 } PCAN_ENDPOINT;
 
+#define PCAN_DEV_USES_ALT_NUM	0x00000001
+
 struct pcan_usb_interface;
 typedef struct pcan_usb_port
 {
@@ -313,7 +321,7 @@ typedef struct pcan_usb_port
 	                                                 // (OUT)
 	PCAN_ENDPOINT pipe_write;
 
-	uint32_t state;
+	uint32_t	state;
 
 } USB_PORT;
 #endif // USB_SUPPORT
@@ -327,6 +335,12 @@ typedef struct pcandev
 	int  nMinor;                                             // the associated minor
 	char *type;                                              // the literal type of the device, info only
 	u16  wType;                                              // (number type) to distinguish sp and epp
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+	u32	flags;
+	u32	device_alt_num;
+	struct device *mapped_dev;
+#endif
 
 #ifdef NETDEV_SUPPORT
 	struct net_device *netdev;                               // reference to net device for AF_CAN
@@ -373,6 +387,7 @@ typedef struct pcandev
 	wait_queue_head_t read_queue;                            // read process wait queue anchor
 	wait_queue_head_t write_queue;                           // write process wait queue anchor
 
+	u16  bus_load;
 	u8   bExtended;                                          // if 0, no extended frames are accepted
 	int  nLastError;                                         // last error written
 	int  busStatus;                                          // follows error status of CAN-Bus
@@ -393,6 +408,9 @@ typedef struct pcandev
 	void *filter;                                            // a ID filter - currently associated to device
 	spinlock_t wlock;                                        // mutual exclusion lock for write invocation
 	spinlock_t isr_lock;                                     // in isr
+
+	uint32_t	tx_error_counter;	/* Tx errors counter */
+	uint32_t	rx_error_counter;	/* Rx errors counter */
 } PCANDEV;
 
 #ifdef USB_SUPPORT
@@ -401,9 +419,11 @@ struct pcan_usb_interface
 	struct usb_device *usb_dev;                      // the origin pointer to my
 	                                                 // USB device from kernel
 	                                                 // and sizes
+	char *	adapter_name;
 	struct usb_interface *usb_intf;
 
 	uint32_t              state;
+	int	cm_ignore_count;	/* nb of CM to ignore before handling */
 
 	u8     ucHardcodedDevNr;
 	u32    dwSerialNumber;                           // Serial number of device
@@ -426,6 +446,9 @@ struct pcan_usb_interface
 	int        read_buffer_size;
 	uint8_t *  read_buffer_addr[2];                  // read data transfer buffer
 	                                                 // for toggle
+	uint8_t *	cout_baddr;		/* command buffer address */
+	int		cout_bsize;		/* command buffer size */
+
 	/* USB pipes to/from CAN controller(s) */
 	PCAN_ENDPOINT pipe_cmd_in;
 	PCAN_ENDPOINT pipe_cmd_out;
@@ -433,7 +456,6 @@ struct pcan_usb_interface
 
 	int  (*device_init)(struct pcan_usb_interface *);
 
-	int  (*device_set_snr)(struct pcan_usb_interface *, uint32_t);
 	int  (*device_get_snr)(struct pcan_usb_interface *, uint32_t *);
 	int  (*device_msg_decode)(struct pcan_usb_interface *, uint8_t *, int );
 	void (*device_free)(struct pcan_usb_interface *);
@@ -461,7 +483,11 @@ struct pcan_usb_interface
 
 	struct timer_list calibration_timer;
 
+	int    frag_rec_offset;
+
 	int    dev_ctrl_count;                           // number of CAN ctrlrs
+	int    dev_opened_count;
+
 	struct pcandev dev[1];                           // the real devices for each
                                                     // CAN controller
 };
@@ -509,6 +535,7 @@ typedef struct driverobj
 	u16 wInitStep;                                           // driver specific init state
 	struct timeval sInitTime;                                // time in usec when init was called
 	struct list_head devices;                                // base of list of devices
+	struct mutex devices_lock;	/* mutex to access devices list */
 	u8  *szVersionString;                                    // pointer to the driver version string
 
 #ifdef PCCARD_SUPPORT
@@ -560,8 +587,13 @@ u32  get_mtime(void);                                           // request time 
 void get_relative_time(struct timeval *tv, struct timeval *tr); // request time from drivers start
 void timeval2pcan(struct timeval *tv, u32 *msecs, u16 *usecs);  // convert to pcan time
 
+void pcan_add_device_in_list(struct pcandev *dev);
+void pcan_del_device_from_list(struct pcandev *dev);
+int pcan_is_device_in_list(struct pcandev *dev);
+
 void pcan_soft_init(struct pcandev *dev, char *szType, u16 wType);
 void buffer_dump(u8 *pucBuffer, u16 wLineCount);
+void dump_mem(char *prompt, void *p, int l);
 void frame2msg(struct can_frame *cf, TPCANMsg *msg);
 void msg2frame(struct can_frame *cf, TPCANMsg *msg);
 int  pcan_chardev_rx(struct pcandev *dev, struct can_frame *cf, struct timeval *tv);
@@ -573,6 +605,11 @@ void pcan_device_node_destroy(struct pcandev *dev);
 #endif
 
 void remove_dev_list(void);
+
+int pcan_sysfs_add_attr(struct device *dev, struct attribute *attrs);
+int pcan_sysfs_add_attrs(struct device *dev, struct attribute **attrs);
+void pcan_sysfs_del_attr(struct device *dev, struct attribute *attrs);
+void pcan_sysfs_del_attrs(struct device *dev, struct attribute **attrs);
 
 #endif // __PCAN_MAIN_H__
 

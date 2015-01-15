@@ -34,7 +34,7 @@
 //
 // pcan_fops.c - all file operation functions, exports only struct fops
 //
-// $Id: pcan_fops.c 629 2010-08-12 20:05:12Z khitschler $
+// $Id: pcan_fops.c 807 2014-12-09 15:34:11Z stephane $
 //
 //****************************************************************************
 
@@ -48,7 +48,6 @@
 #include <linux/autoconf.h>
 #endif
 #endif
-#include <linux/module.h>
 
 #include <linux/kernel.h>   // DPRINTK()
 #include <linux/slab.h>     // kmalloc()
@@ -59,7 +58,9 @@
 #include <linux/fcntl.h>    // O_ACCMODE
 #include <linux/pci.h>      // all about pci
 #include <linux/capability.h> // all about restrictions
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)
 #include <asm/system.h>     // cli(), *_flags
+#endif
 #include <asm/uaccess.h>    // copy_...
 #include <linux/delay.h>    // mdelay()
 #include <linux/poll.h>     // poll() and select()
@@ -90,7 +91,7 @@
 #endif
 
 MODULE_AUTHOR("klaus.hitschler@gmx.de");
-MODULE_DESCRIPTION("Driver for PEAK-Systems CAN interfaces.");
+MODULE_DESCRIPTION("Driver for PEAK-System CAN interfaces");
 MODULE_VERSION(CURRENT_RELEASE);
 MODULE_SUPPORTED_DEVICE("PCAN-ISA, PCAN-PC/104, PCAN-Dongle, PCAN-PCI(e), PCAN-ExpressCard, PCAN-PCCard, PCAN-USB (compilation dependent)");
 MODULE_LICENSE("GPL");
@@ -141,75 +142,83 @@ EXPORT_NO_SYMBOLS;
 //****************************************************************************
 // CODE
 #ifdef NO_RT
-  #include "pcan_fops_linux.c"
+	#include "pcan_fops_linux.c"
 #else
-  #include "pcan_fops_rt.c"
+	#include "pcan_fops_rt.c"
 #endif
 
 //----------------------------------------------------------------------------
 // is called by pcan_open() and pcan_netdev_open()
 int pcan_open_path(PCAN_OPEN_PATH_ARGS)
 {
-  int err = 0;
+	int err = 0;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_open_path, minor = %d, path = %d.\n",
-    DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
+	DPRINTK(KERN_DEBUG "%s: pcan_open_path, minor = %d, path = %d.\n",
+		DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
 
-  // only the first open to this device makes a default init on this device
-  if (!dev->nOpenPaths)
-  {
-    // empty all FIFOs
-    err = pcan_fifo_reset(&dev->writeFifo);
-    if (err)
-      return err;
-    err = pcan_fifo_reset(&dev->readFifo);
-    if (err)
-      return err;
+	// only the 1st open to this device makes a default init on this device
+	if (!dev->nOpenPaths) {
+		// empty all FIFOs
+		err = pcan_fifo_reset(&dev->writeFifo);
+		if (err)
+			return err;
+		err = pcan_fifo_reset(&dev->readFifo);
+		if (err)
+			return err;
 
-    // open the interface special parts
-    err = dev->open(dev);
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't open interface special parts!\n", DEVICE_NAME);
-      return err;
-    }
+		// open the interface special parts
+		err = dev->open(dev);
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't open interface special parts!\n",
+				DEVICE_NAME);
+			return err;
+		}
 
-    // special handling: probe here only for dongle devices, connect after init is possible
-    if ((dev->wType == HW_DONGLE_SJA) || (dev->wType == HW_DONGLE_SJA_EPP))
-    {
-      err = sja1000_probe(dev); // no usb here, generic sja1000 call for dongle
-      if (err)
-      {
-        DPRINTK(KERN_ERR "%s: %s-dongle device minor %d not found (io=0x%04x,irq=%d)\n", DEVICE_NAME,
-                                  dev->type, dev->nMinor, dev->port.dng.dwPort, dev->port.dng.wIrq);
-        dev->release(dev);
-        return err;
-      }
-    }
+		/*
+		 * special handling: probe here only for dongle devices,
+		 * connect after init is possible
+		 */
+		if ((dev->wType == HW_DONGLE_SJA) ||
+				(dev->wType == HW_DONGLE_SJA_EPP)) {
+			err = sja1000_probe(dev); // no usb here, generic sja1000 call for dongle
+			if (err) {
+				DPRINTK(KERN_ERR
+					"%s: %s-dongle device minor %d not found (io=0x%04x,irq=%d)\n",
+					DEVICE_NAME, dev->type, dev->nMinor,
+					dev->port.dng.dwPort,
+					dev->port.dng.wIrq);
+				dev->release(dev);
+				return err;
+			}
+		}
 
-    // install irq
-    err = dev->req_irq(REQ_IRQ_ARG);
+		// install irq
+		err = dev->req_irq(REQ_IRQ_ARG);
 
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't request irq from device!\n", DEVICE_NAME);
-      return err;
-    }
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't request irq from device!\n",
+				DEVICE_NAME);
+			return err;
+		}
 
-    // open the device itself
-    err = dev->device_open(dev, dev->wBTR0BTR1, dev->ucCANMsgType, dev->ucListenOnly);
-    if (err)
-    {
-      DPRINTK(KERN_DEBUG "%s: can't open device hardware itself!\n", DEVICE_NAME);
-      return err;
-    }
-  }
+		// open the device itself
+		err = dev->device_open(dev, dev->wBTR0BTR1, dev->ucCANMsgType,
+				       dev->ucListenOnly);
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: can't open device hardware itself!\n",
+				DEVICE_NAME);
+			return err;
+		}
+	}
 
-  dev->nOpenPaths++;
+	dev->nOpenPaths++;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_open_path() is OK\n", DEVICE_NAME);
+	DPRINTK(KERN_DEBUG "%s: pcan_open_path() is OK\n", DEVICE_NAME);
 
-  return 0;
+	return 0;
 }
 
 //----------------------------------------------------------------------------
@@ -217,159 +226,167 @@ int pcan_open_path(PCAN_OPEN_PATH_ARGS)
 // returns NULL pointer in the case of no success
 struct pcandev* pcan_search_dev(int major, int minor)
 {
-  struct pcandev *dev = (struct pcandev *)NULL;
-  struct list_head *ptr;
+	struct pcandev *dev = (struct pcandev *)NULL;
+	struct list_head *ptr;
 
-  DPRINTK(KERN_DEBUG "%s: pcan_search_dev(), major,minor = %d,%d.\n", 
-          DEVICE_NAME, major, minor);
+	DPRINTK(KERN_DEBUG "%s: pcan_search_dev(), major,minor = %d,%d.\n", 
+		DEVICE_NAME, major, minor);
 
-  if (list_empty(&pcan_drv.devices))
-  {
-    DPRINTK(KERN_DEBUG "%s: no devices to select from!\n", DEVICE_NAME);
-    return NULL;
-  }
+	mutex_lock(&pcan_drv.devices_lock);
 
-  // loop through my devices
-  for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; ptr = ptr->next)
-  {
-    dev = (struct pcandev *)ptr;
+	if (list_empty(&pcan_drv.devices)) {
+		mutex_unlock(&pcan_drv.devices_lock);
+		DPRINTK(KERN_DEBUG "%s: no devices to select from!\n",
+			DEVICE_NAME);
+		return NULL;
+	}
 
-    if (dev->nMajor == major)
-      if (dev->nMinor == minor)
-        break;
-  }
+	/* loop through my devices */
+	for (ptr = pcan_drv.devices.next; ptr != &pcan_drv.devices; 
+							ptr = ptr->next) {
+		dev = (struct pcandev *)ptr;
 
-  if (ptr == &pcan_drv.devices)
-  {
-    printk(KERN_DEBUG "%s: didn't find any pcan devices (%d,%d)\n", 
-           DEVICE_NAME, major, minor);
-    return NULL;
-  }
+		if (dev->nMajor == major)
+			if (dev->nMinor == minor)
+				break;
+	}
 
-  return dev;
+	mutex_unlock(&pcan_drv.devices_lock);
+
+	if (ptr == &pcan_drv.devices) {
+		printk(KERN_DEBUG "%s: didn't find any pcan devices (%d,%d)\n", 
+			DEVICE_NAME, major, minor);
+		return NULL;
+	}
+
+	return dev;
 }
 
 //----------------------------------------------------------------------------
 // is called by pcan_release() and pcan_netdev_close()
 void pcan_release_path(PCAN_RELEASE_PATH_ARGS)
 {
-  DPRINTK(KERN_DEBUG "%s: pcan_release_path, minor = %d, path = %d.\n",
-    DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
+	DPRINTK(KERN_DEBUG "%s: pcan_release_path, minor = %d, path = %d.\n",
+		DEVICE_NAME, dev->nMinor, dev->nOpenPaths);
 
-    // if it's the last release: init the chip for non-intrusive operation
-  if (dev->nOpenPaths > 1)
-      dev->nOpenPaths--;
-  else
-  {
-    WAIT_UNTIL_FIFO_EMPTY();
-    // release the device itself
-    dev->device_release(dev);
+	/* if it's the last release: init the chip for non-intrusive operation*/
+	if (dev->nOpenPaths > 1) {
+		dev->nOpenPaths--;
 
-    dev->release(dev);
-    dev->nOpenPaths = 0;
+	} else  {
 
-    // release the interface depended irq, after this 'dev' is not valid
-    dev->free_irq(dev);
-  }
+		WAIT_UNTIL_FIFO_EMPTY();
+
+		/* release the device itself */
+		dev->device_release(dev);
+
+		dev->release(dev);
+		dev->nOpenPaths = 0;
+
+		/*
+		 * release the interface depended irq, after this 'dev' is not
+		 * valid
+		 */
+		dev->free_irq(dev);
+	}
 }
 
 //----------------------------------------------------------------------------
 // is called at user ioctl() with cmd = PCAN_GET_EXT_STATUS
-TPEXTENDEDSTATUS pcan_ioctl_extended_status_common(struct pcandev *dev)
+int pcan_ioctl_extended_status_common(struct pcandev *dev, 
+					TPEXTENDEDSTATUS *local)
 {
-  TPEXTENDEDSTATUS local;
+	local->wErrorFlag = dev->wCANStatus;
 
-  local.wErrorFlag = dev->wCANStatus;
+	local->nPendingReads = dev->readFifo.nStored;
 
-  local.nPendingReads = dev->readFifo.nStored;
+	// get infos for friends of polling operation
+	if (pcan_fifo_empty(&dev->readFifo))
+		local->wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
-  // get infos for friends of polling operation
-  if (pcan_fifo_empty(&dev->readFifo))
-    local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
+	local->nPendingWrites = (dev->writeFifo.nStored + \
+				((atomic_read(&dev->DataSendReady)) ? 0 : 1));
 
-  local.nPendingWrites = (dev->writeFifo.nStored + ((atomic_read(&dev->DataSendReady)) ? 0 : 1));
+	if (!pcan_fifo_not_full(&dev->writeFifo))
+		local->wErrorFlag |= CAN_ERR_QXMTFULL;
 
-  if (!pcan_fifo_not_full(&dev->writeFifo))
-    local.wErrorFlag |= CAN_ERR_QXMTFULL;
+	local->nLastError = dev->nLastError;
 
-  local.nLastError = dev->nLastError;
-
-  return local;
+	return 0;
 }
 
 //----------------------------------------------------------------------------
 // is called at user ioctl() with cmd = PCAN_GET_STATUS
-TPSTATUS pcan_ioctl_status_common(struct pcandev *dev)
+int pcan_ioctl_status_common(struct pcandev *dev, TPSTATUS *local)
 {
-  TPSTATUS local;
+	local->wErrorFlag = dev->wCANStatus;
 
-  local.wErrorFlag = dev->wCANStatus;
+	// get infos for friends of polling operation
+	if (pcan_fifo_empty(&dev->readFifo))
+		local->wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
-  // get infos for friends of polling operation
-  if (pcan_fifo_empty(&dev->readFifo))
-    local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
+	if (!pcan_fifo_not_full(&dev->writeFifo))
+		local->wErrorFlag |= CAN_ERR_QXMTFULL;
 
-  if (!pcan_fifo_not_full(&dev->writeFifo))
-    local.wErrorFlag |= CAN_ERR_QXMTFULL;
+	local->nLastError = dev->nLastError;
 
-  local.nLastError = dev->nLastError;
-
-  return local;
+	return 0;
 }
 
 //----------------------------------------------------------------------------
 // is called at user ioctl() with cmd = PCAN_DIAG
-TPDIAG pcan_ioctl_diag_common(struct pcandev *dev)
+int pcan_ioctl_diag_common(struct pcandev *dev, TPDIAG *local)
 {
-  TPDIAG local;
+	local->wType = dev->wType;
 
-  local.wType           = dev->wType;
-  switch (dev->wType)
-  {
-    case HW_ISA_SJA:
-      local.dwBase      = dev->port.isa.dwPort;
-      local.wIrqLevel   = dev->port.isa.wIrq;
-      break;
-    case HW_DONGLE_SJA:
-    case HW_DONGLE_SJA_EPP:
-      local.dwBase      = dev->port.dng.dwPort;
-      local.wIrqLevel   = dev->port.dng.wIrq;
-      break;
-    case HW_PCI:
-      local.dwBase      = dev->port.pci.dwPort;
-      local.wIrqLevel   = dev->port.pci.wIrq;
-      break;
-    case HW_USB:
-    case HW_USB_PRO:
+	switch (dev->wType) {
+	case HW_ISA_SJA:
+		local->dwBase = dev->port.isa.dwPort;
+		local->wIrqLevel = dev->port.isa.wIrq;
+		break;
+	case HW_DONGLE_SJA:
+	case HW_DONGLE_SJA_EPP:
+		local->dwBase = dev->port.dng.dwPort;
+		local->wIrqLevel = dev->port.dng.wIrq;
+		break;
+	case HW_PCI:
+		local->dwBase = dev->port.pci.dwPort;
+		local->wIrqLevel = dev->port.pci.wIrq;
+		break;
+	case HW_USB:
+	case HW_USB_FD:
+	case HW_USB_PRO:
+	case HW_USB_PRO_FD:
 #ifdef USB_SUPPORT
-      local.dwBase    = dev->port.usb.usb_if->dwSerialNumber;
-      local.wIrqLevel = dev->port.usb.ucHardcodedDevNr;
+		local->dwBase = dev->port.usb.usb_if->dwSerialNumber;
+		local->wIrqLevel = dev->port.usb.ucHardcodedDevNr;
 #endif
-      break;
-    case HW_PCCARD:
+		break;
+	case HW_PCCARD:
 #ifdef PCCARD_SUPPORT
-      local.dwBase      = dev->port.pccard.dwPort;
-      local.wIrqLevel   = dev->port.pccard.wIrq;
+		local->dwBase = dev->port.pccard.dwPort;
+		local->wIrqLevel = dev->port.pccard.wIrq;
 #endif
-      break;
-  }
-  local.dwReadCounter   = dev->readFifo.dwTotal;
-  local.dwWriteCounter  = dev->writeFifo.dwTotal;
-  local.dwIRQcounter    = dev->dwInterruptCounter;
-  local.dwErrorCounter  = dev->dwErrorCounter;
-  local.wErrorFlag      = dev->wCANStatus;
+		break;
+	}
 
-  // get infos for friends of polling operation
-  if (pcan_fifo_empty(&dev->readFifo))
-    local.wErrorFlag |= CAN_ERR_QRCVEMPTY;
+	local->dwReadCounter = dev->readFifo.dwTotal;
+	local->dwWriteCounter = dev->writeFifo.dwTotal;
+	local->dwIRQcounter = dev->dwInterruptCounter;
+	local->dwErrorCounter = dev->dwErrorCounter;
+	local->wErrorFlag = dev->wCANStatus;
 
-  if (!pcan_fifo_not_full(&dev->writeFifo))
-    local.wErrorFlag |= CAN_ERR_QXMTFULL;
+	// get infos for friends of polling operation
+	if (pcan_fifo_empty(&dev->readFifo))
+		local->wErrorFlag |= CAN_ERR_QRCVEMPTY;
 
-  local.nLastError      = dev->nLastError;
-  local.nOpenPaths      = dev->nOpenPaths;
+	if (!pcan_fifo_not_full(&dev->writeFifo))
+		local->wErrorFlag |= CAN_ERR_QXMTFULL;
 
-  strncpy(local.szVersionString, pcan_drv.szVersionString, VERSIONSTRING_LEN);
+	local->nLastError = dev->nLastError;
+	local->nOpenPaths = dev->nOpenPaths;
 
-  return local;
+	strncpy(local->szVersionString,
+			pcan_drv.szVersionString, VERSIONSTRING_LEN);
+	return 0;
 }

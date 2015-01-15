@@ -18,10 +18,11 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 //
-// Maintainer(s): Klaus Hitschler (klaus.hitschler@gmx.de)
+// Maintainer(s): Stephane Grosjean (s.grosjean@peak-system.com)
 //
 // Major contributions by:
-//                Oliver Hartkopp   (oliver.hartkopp@volkswagen.de) socketCAN
+//                Klaus Hitschler (klaus.hitschler@gmx.de)
+//                Oliver Hartkopp (oliver.hartkopp@volkswagen.de) socketCAN
 //
 //****************************************************************************
 
@@ -29,7 +30,12 @@
 //
 // pcan_usb.c - the inner parts for pcan-usb support
 //
-// $Id: pcan_usb.c 615 2010-02-14 22:38:55Z khitschler $
+// $Id: pcan_usb.c 807 2014-12-09 15:34:11Z stephane $
+//
+// 2011-08-22 SGr
+// - pcan_usb_cleanup(NEW): add the sending of the bus off request in cleanup
+//   callback since this is the last place we may submit urb to the device
+//   before driver removal.
 //
 //****************************************************************************
 //#define DEBUG
@@ -39,6 +45,7 @@
 // INCLUDES
 #include <src/pcan_common.h>
 #include <linux/sched.h>
+#include <linux/net.h>
 #include <src/pcan_main.h>
 #include <src/pcan_fifo.h>
 #include <src/pcan_usb.h>
@@ -50,6 +57,13 @@
 
 //****************************************************************************
 // DEFINES
+/*
+ * if defined, takes into account that DLC field may be > 8.
+ * in any case, DLC > 8 means DLC = 8. It also means that applications HAVE TO
+ * handle the fact that C struct object lenght field MAY be greater than 8 !!!
+ * Should be defined, since PCAN-USB is able to generate such values !
+ */
+#define HANDLE_DLC_GT_THAN_8
 
 // bit masks for status/length field in a USB message
 #define STLN_WITH_TIMESTAMP 0x80
@@ -99,6 +113,12 @@
 
 #define COMMAND_TIMEOUT                1000  // ms timeout for EP0 control urbs
 
+/* older kernels don't define it */
+#ifndef pr_err
+#define pr_err(fmt, ...) \
+	printk(KERN_ERR pr_fmt(fmt), ##__VA_ARGS__)
+#endif
+
 // pcan-usb parameter get an set function
 typedef struct
 {
@@ -109,6 +129,7 @@ typedef struct
 
 //****************************************************************************
 // GLOBALS
+extern int pcan_kill_sync_urb(struct urb *urb);
 
 //****************************************************************************
 // LOCALS
@@ -171,18 +192,22 @@ static void pcan_calcTimevalFromTicks(struct pcandev *dev, struct timeval *tv)
 	
 	tv->tv_sec = t->StartTime.tv_sec + nb_s;
 
+#if 0
 	DPRINTK(KERN_DEBUG "%s: %s(): tv_sec=%us.%uus.\n", 
 	        DEVICE_NAME, __FUNCTION__, 
 	        (uint32_t )tv->tv_sec, (uint32_t )tv->tv_usec);
+#endif
 }
 
 static void pcan_updateTimeStampFromWord(struct pcandev *dev, u16 wTimeStamp, u8 ucStep)
 {
 	register PCAN_USB_TIME *t = &dev->port.usb.usb_time;
 
+#if 0
 	DPRINTK(KERN_DEBUG "%s: %s() ts=%u prev=%u cum=%llu\n", 
 	        DEVICE_NAME, __FUNCTION__,
 	        wTimeStamp, t->wLastTickValue, t->ullCumulatedTicks);
+#endif
 
 	if ((!t->StartTime.tv_sec) && (!t->StartTime.tv_usec))
 	{
@@ -226,9 +251,11 @@ static void pcan_updateTimeStampFromByte(struct pcandev *dev, u8 ucTimeStamp)
 {
 	register PCAN_USB_TIME *t = &dev->port.usb.usb_time;
 
+#if 0
 	DPRINTK(KERN_DEBUG "%s: %s() ts=%u prev=%u cum = %llu\n", 
 	        DEVICE_NAME, __FUNCTION__, 
 	        ucTimeStamp, t->ucLastTickValue, t->ullCumulatedTicks);
+#endif
 
 	if (ucTimeStamp < t->ucLastTickValue)  // handle wrap
 	{
@@ -277,6 +304,7 @@ static int pcan_usb_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
 	PCAN_USB_PARAM myParameter;
 	int nResult = 0;
 	register purb_t pt;
+	u32 startTime;
 
 	DPRINTK(KERN_DEBUG "%s: %s(): ->EP#%02X\n", DEVICE_NAME, __FUNCTION__, 
 	        usb_if->pipe_cmd_out.ucNumber);
@@ -324,11 +352,26 @@ static int pcan_usb_setcontrol_urb(struct pcandev *dev, u8 function, u8 number,
 		atomic_inc(&usb_if->active_urbs);
 
 	// wait until submit is finished, either normal or thru timeout
-	while (!atomic_read(&usb_if->cmd_sync_complete))
+	startTime = get_mtime();
+	while (!atomic_read(&usb_if->cmd_sync_complete)) {
 		schedule();
+
+		/* check if we're waiting too long for urb submission */
+		if ((get_mtime() - startTime) >= COMMAND_TIMEOUT) {
+			/*
+			 * yes we are, so kill it: the urb status will contain
+			 * the error
+			 */
+			usb_kill_urb(pt);
+			break;
+		}
+	}
 
 	// remove urb
 	nResult = pt->status;
+	if (nResult) 
+		pr_err("%s: error %d submitting command\n", 
+		       DEVICE_NAME, nResult);
 
 fail:
 	atomic_set(&usb_if->cmd_sync_complete, 0);
@@ -347,8 +390,8 @@ static int pcan_set_function(struct pcandev *dev, u8 function, u8 number)
 
 // in opposition to WIN method this performs the complete write and read cycle!
 static int pcan_usb_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
-					                   u8 *param0, u8 *param1, u8 *param2, u8 *param3,
-					                   u8 *param4, u8 *param5, u8 *param6, u8 *param7)
+                                 u8 *param0, u8 *param1, u8 *param2, u8 *param3,
+                                 u8 *param4, u8 *param5, u8 *param6, u8 *param7)
 {
 	struct pcan_usb_interface *usb_if = dev->port.usb.usb_if;
 	PCAN_USB_PARAM myParameter;
@@ -365,9 +408,10 @@ static int pcan_usb_getcontrol_urb(struct pcandev *dev, u8 function, u8 number,
 	// first write function and number to device
 	nResult = pcan_set_function(dev, function, number);
 
-	// heuristic result - wait a little bit
+#if 0
+	// heuristic result - wait a little bit (not useful)
 	mdelay(5);
-
+#endif
 	if (!nResult)
 	{
 		u32 startTime;
@@ -452,8 +496,8 @@ static int pcan_usb_setCANOn(struct pcandev *dev)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	return pcan_usb_setcontrol_urb(dev, 3, 2, 1, dummy,
-					                   dummy, dummy, dummy, dummy, dummy, dummy,
-					                   dummy, dummy, dummy, dummy, dummy, dummy);
+	                   dummy, dummy, dummy, dummy, dummy, dummy,
+	                   dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
 static int pcan_usb_setCANOff(struct pcandev *dev)
@@ -464,14 +508,42 @@ static int pcan_usb_setCANOff(struct pcandev *dev)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	err = pcan_usb_setcontrol_urb(dev, 3, 2, 0, dummy,
-					                  dummy, dummy, dummy, dummy, dummy, dummy,
-					                  dummy, dummy, dummy, dummy, dummy, dummy);
-	if (err) return err;
+	                  dummy, dummy, dummy, dummy, dummy, dummy,
+	                  dummy, dummy, dummy, dummy, dummy, dummy);
+
+	/* or if (err != -ENODEV) { */
+	if (dev->ucPhysicallyInstalled) {
+		struct pcan_usb_interface *usb_if = dev->port.usb.usb_if;
+
+		//pr_err("%s: PCAN-USB fw 2.8 workaround\n", DEVICE_NAME);
+		DPRINTK(KERN_DEBUG "%s: %s fw 2.8 workaround\n",
+				DEVICE_NAME, usb_if->adapter_name);
+		err = usb_clear_halt(usb_if->usb_dev,
+				usb_sndbulkpipe(usb_if->usb_dev,
+						usb_if->pipe_cmd_out.ucNumber));
+#ifdef DEBUG
+		if (err)
+			pr_err("%s: %s(): usb_clear_halt(1) failed err %d\n",
+				DEVICE_NAME, __FUNCTION__, err);
+#endif
+
+		err = usb_clear_halt(usb_if->usb_dev,
+				usb_rcvbulkpipe(usb_if->usb_dev,
+						usb_if->pipe_cmd_in.ucNumber));
+		if (err) {
+			DPRINTK(KERN_DEBUG
+				"%s: %s(): usb_clear_halt(2) failed err %d\n",
+				DEVICE_NAME, __FUNCTION__, err);
+			return err;
+		}
+
+		mdelay(50);
+	}
 
 	//Set SJA1000 in init mode
 	err = pcan_usb_setcontrol_urb(dev, 9, 2, 0, 1,
-					                  dummy, dummy, dummy, dummy, dummy, dummy,
-					                  dummy, dummy, dummy, dummy, dummy, dummy);
+	                  dummy, dummy, dummy, dummy, dummy, dummy,
+	                  dummy, dummy, dummy, dummy, dummy, dummy);
 	return err;
 }
 
@@ -482,8 +554,8 @@ static int pcan_usb_setCANSilentOn(struct pcandev *dev)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	return pcan_usb_setcontrol_urb(dev, 3, 3, 1, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy);
+	                 dummy, dummy, dummy, dummy, dummy, dummy,
+	                 dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
 static int pcan_usb_setCANSilentOff(struct pcandev *dev)
@@ -493,8 +565,8 @@ static int pcan_usb_setCANSilentOff(struct pcandev *dev)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	return pcan_usb_setcontrol_urb(dev, 3, 3, 0, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy);
+	                 dummy, dummy, dummy, dummy, dummy, dummy,
+	                 dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
 #if 0
@@ -578,9 +650,17 @@ static int pcan_usb_getDeviceNr(struct pcandev *dev, u32 *pdwDeviceNr)
 
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
+	*pdwDeviceNr = 0;
 	err = pcan_usb_getcontrol_urb(dev, 4, 1, pucDeviceNr, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy, &dummy);
 
-	DPRINTK(KERN_DEBUG "%s: DeviceNr = 0x%02x\n", DEVICE_NAME, *pucDeviceNr);
+	DPRINTK(KERN_DEBUG "%s: DeviceNr = 0x%x\n", DEVICE_NAME, *pdwDeviceNr);
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+        if (!err && (*pucDeviceNr != 255)) {
+		dev->device_alt_num = *pucDeviceNr;
+		dev->flags |= PCAN_DEV_USES_ALT_NUM;
+	}
+#endif
 
 	return err;
 }
@@ -592,25 +672,9 @@ static int pcan_usb_setDeviceNr(struct pcandev *dev, u32 dwDeviceNr)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	return pcan_usb_setcontrol_urb(dev, 4, 2, (u8 )dwDeviceNr, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy);
+	                 dummy, dummy, dummy, dummy, dummy, dummy,
+	                 dummy, dummy, dummy, dummy, dummy, dummy);
 }
-
-static int pcan_usb_setSNR(struct pcan_usb_interface *usb_if, uint32_t dwSNR)
-{
-	struct pcandev *dev = &usb_if->dev[0];
-	u8  dummy  = 0;
-	ULCONV SNR;
-
-	SNR.ul = dwSNR;
-
-	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
-
-	return pcan_usb_setcontrol_urb(dev, 6, 2, SNR.uc[3], SNR.uc[2], SNR.uc[1], SNR.uc[0],
-					                 dummy, dummy, dummy, dummy, dummy,
-					                 dummy, dummy, dummy, dummy, dummy);
-}
-
 
 static int pcan_usb_setExtVCCOff(struct pcandev *dev)
 {
@@ -619,8 +683,8 @@ static int pcan_usb_setExtVCCOff(struct pcandev *dev)
 	DPRINTK(KERN_DEBUG "%s: %s()\n", DEVICE_NAME, __FUNCTION__);
 
 	return pcan_usb_setcontrol_urb(dev, 0xA, 2, 0, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy,
-					                 dummy, dummy, dummy, dummy, dummy, dummy);
+		                 dummy, dummy, dummy, dummy, dummy, dummy,
+		                 dummy, dummy, dummy, dummy, dummy, dummy);
 }
 
 static int pcan_usb_getSNR(struct pcan_usb_interface *usb_if, uint32_t *pdwSNR)
@@ -692,28 +756,6 @@ fail:
 	return err;
 }
 
-#if 0
-static void dump_mem(char *prompt, void *p, int l)
-{
-#ifdef DEBUG
-   char *kern = KERN_DEBUG;
-#else
-   char *kern = KERN_INFO;
-#endif
-   uint8_t *pc = (uint8_t *)p;
-   int i;
-
-   printk("%sDumping %s (%d bytes):\n", kern, prompt?prompt:"memory", l);
-   for (i=0; i < l; )
-   {
-      if ((i % 16) == 0) printk(kern);
-      printk("%02X ", *pc++);
-      if ((++i % 16) == 0) printk("\n");
-   }
-   if (i % 16) printk("\n");
-}
-#endif
-
 //****************************************************************************
 // takes USB-message frames out of ucMsgPtr, decodes and packs them into readFifo
 static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPtr, int lCurrentLength)
@@ -735,7 +777,11 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 	// opened by any user (USB-PRO needs handling such messages)
 	// Thus, MUST check here if any path has been opened before posting any
 	// messages
-	if (dev->nOpenPaths <= 0) return 0;
+	if (dev->nOpenPaths <= 0) {
+		DPRINTK(KERN_DEBUG "%s: pcan_usb_DecodeMessage(%p, %d): ignored (nOpenPaths=%d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength, dev->nOpenPaths);
+		buffer_dump(ucMsgPtr, lCurrentLength/16+1);
+		return 0;
+	}
 
 	//DPRINTK(KERN_DEBUG "%s: pcan_usb_DecodeMessage(%p, %d)\n", DEVICE_NAME, ucMsgPtr, lCurrentLength);
 	//dump_mem("received buffer", ucMsgPtr, lCurrentLength);
@@ -772,9 +818,15 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 			struct can_frame frame;
 
 			ucLen = ucStatusLen & STLN_DATA_LENGTH;
+#ifndef HANDLE_DLC_GT_THAN_8
 			if (ucLen > 8)
 				ucLen = 8;
 			frame.can_dlc = ucLen;
+#else
+			/* temporary, MUST check if lib and user app support */
+			//frame.can_dlc = ucLen;
+			frame.can_dlc = (ucLen > 8) ? 8 : ucLen;
+#endif
 
 			nRtrFrame = ucStatusLen & STLN_RTR;
 			if (nRtrFrame)
@@ -840,12 +892,23 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 			else
 				pcan_updateTimeStampFromByte(dev, *ucMsgPtr++);
 
+#ifndef HANDLE_DLC_GT_THAN_8
+#else
+			/*
+			 * SGr FIX: 
+			 * save in DATA array at most 8 bytes, ignore
+			 * all others but ALWAYS increment msg ptr
+			 * according to ucLen
+			 */
+#endif
 			// read data
 			j = 0;
-			if (!nRtrFrame)
-			{
-				while (ucLen--)
-					frame.data[j++] = *ucMsgPtr++;
+			if (!nRtrFrame) {
+				while (ucLen--) {
+					if (j < 8)
+						frame.data[j++] = *ucMsgPtr;
+					ucMsgPtr++;
+				}
 			}
 
 			// only for beauty, replace useless telegram content with zeros
@@ -854,8 +917,12 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 
 			pcan_calcTimevalFromTicks(dev, &tv);
 
-			if ((err = pcan_xxxdev_rx(dev, &frame, &tv)) < 0) // put into data sink
+			if ((err = pcan_xxxdev_rx(dev, &frame, &tv)) < 0) { // put into data sink
+				if (net_ratelimit())
+					pr_err("%s: pcan_xxxdev_rx(1) failure\n", DEVICE_NAME);
+				//dump_mem(DEVICE_NAME, frame.data, j);
 				goto fail;
+			}
 
 			if (err > 0) // successfully enqueued into chardev FIFO
 				rwakeup++;
@@ -879,9 +946,15 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 
 			// prepare length of data
 			ucLen = ucStatusLen & STLN_DATA_LENGTH;
+#ifndef HANDLE_DLC_GT_THAN_8
 			if (ucLen > 8)
 				ucLen = 8;
 			msg.Msg.LEN = ucLen;
+#else
+			/* temporary, MUST check if lib and user app support */
+			//msg.Msg.LEN = ucLen;
+			msg.Msg.LEN = (ucLen > 8) ? 8 : ucLen;
+#endif
 
 			// get function and number
 			ucFunction = *ucMsgPtr++;
@@ -938,10 +1011,22 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 					dev->wCANStatus |= CAN_ERR_BUSLIGHT;
 
 				// version 3: sometimes the telegram carries 3 additional data without note in ucStatusLen.
+#ifndef HANDLE_DLC_GT_THAN_8
 				// Don't know what to do ??
+#else
+				/*
+				 * SGr FIX: 
+				 * save in DATA array at most 8 bytes, ignore
+				 * all others but ALWAYS increment msg ptr
+				 * according to ucLen
+				 */
+#endif
 				j = 0;
-				while (ucLen--)
-					msg.Msg.DATA[j++] = *ucMsgPtr++;
+				while (ucLen--) {
+					if (j < 8)
+						msg.Msg.DATA[j++] = *ucMsgPtr;
+					ucMsgPtr++;
+				}
 				break;
 			case 2: // get_analog_value, remove bytes
 				dummy = *ucMsgPtr++;
@@ -971,9 +1056,20 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 					dev->dwErrorCounter++;
 				}
 
+#ifdef HANDLE_DLC_GT_THAN_8
+				/*
+				 * SGr FIX: 
+				 * save in DATA array at most 8 bytes, ignore
+				 * all others but ALWAYS increment msg ptr
+				 * according to ucLen
+				 */
+#endif
 				j = 0;
-				while (ucLen--)
-					msg.Msg.DATA[j++] = *ucMsgPtr++;
+				while (ucLen--) {
+					if (j < 8)
+						msg.Msg.DATA[j++] = *ucMsgPtr;
+					ucMsgPtr++;
+				}
 				break;
 			case 10: // prepared for future
 				break;
@@ -992,8 +1088,12 @@ static int pcan_usb_DecodeMessage(struct pcan_usb_interface *usb_if, u8 *ucMsgPt
 
 				pcan_calcTimevalFromTicks(dev, &tv);
 
-				if ((err = pcan_xxxdev_rx(dev, &ef, &tv)) < 0) // put into data sink
+				if ((err = pcan_xxxdev_rx(dev, &ef, &tv)) < 0) {// put into data sink
+					if (net_ratelimit())
+						pr_err("%s: pcan_xxxdev_rx(2) failure\n", DEVICE_NAME);
+					//dump_mem(DEVICE_NAME, msg.Msg.DATA, msg.Msg.LEN);
 					goto fail;
+				}
 
 				if (err > 0) // successfully enqueued into chardev FIFO
 					rwakeup++;
@@ -1122,9 +1222,12 @@ static int pcan_usb_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnData
 		if (!nRtrFrame)
 		{
 			// put data
+#ifdef HANDLE_DLC_GT_THAN_8
+			/* SGr NOTE: copy *ONLY* 8 bytes max */
+#endif
 			j = 0;
 			while (ucLen--)
-				*ptr++ = msg.DATA[j++];
+				*ptr++ = (j < 8) ? msg.DATA[j++] : 0;
 		}
 
 		nMsgCounter++;
@@ -1152,21 +1255,55 @@ static int pcan_usb_EncodeMessage(struct pcandev *dev, u8 *ucMsgPtr, int *pnData
 }
 
 /*
+ * void pcan_usb_cleanup(struct pcandev *dev)
+ *
+ * Last chance to submit URB before drievr removal.
+ */
+static void pcan_usb_cleanup(struct pcandev *dev)
+{
+	/* Set CAN bus off here now since we're sure that the request will be */
+	/* sent to the usb module */
+	pcan_usb_setCANOff(dev);
+}
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+static int pcan_usb_ctrl_init(struct pcandev *dev)
+{
+	struct pcan_usb_interface *usb_if = dev->port.usb.usb_if;
+
+	pr_info("%s: %s channel device number=%u\n", 
+		DEVICE_NAME, usb_if->adapter_name, dev->device_alt_num);
+	return 0;
+}
+#endif
+
+/*
  * int pcan_usb_init(struct pcan_usb_interface *usb_if)
  *
  * Do the initialization part of a PCAN-USB adapter.
  */
 int pcan_usb_init(struct pcan_usb_interface *usb_if)
 {
+	usb_if->adapter_name = "PCAN-USB";
+#ifdef PCAN_DEV_USES_ALT_NUM
+	usb_if->device_ctrl_init = pcan_usb_ctrl_init;
+#endif
+	usb_if->device_ctrl_cleanup = pcan_usb_cleanup;
 	usb_if->device_ctrl_open = pcan_usb_Init;
 	usb_if->device_ctrl_set_bus_on = pcan_usb_setCANOn;
 	usb_if->device_ctrl_set_bus_off = pcan_usb_setCANOff;
-	usb_if->device_set_snr = pcan_usb_setSNR;
 	usb_if->device_get_snr = pcan_usb_getSNR;
 	usb_if->device_ctrl_set_dnr = pcan_usb_setDeviceNr;
 	usb_if->device_ctrl_get_dnr = pcan_usb_getDeviceNr;
 	usb_if->device_ctrl_msg_encode = pcan_usb_EncodeMessage;
 	usb_if->device_msg_decode = pcan_usb_DecodeMessage;
+
+#ifdef PCAN_DEV_USES_ALT_NUM
+	/*
+	 * MUST initialize alt_num here (before creating devices) for Udev rules
+	 */
+	usb_if->dev[0].device_alt_num = 0xff;
+#endif
 
 #if 0
 	/* check do_div() macro */
