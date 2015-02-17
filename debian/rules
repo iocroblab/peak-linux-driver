@@ -45,9 +45,9 @@ install: build
 	dh_installdirs
 
 	cp -f driver/udev/45-pcan.rules debian/peak-linux-driver-dkms.udev
-	cp -rf driver/src debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.9/
-	cp -rf driver/pcan.h debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.9/
-	cp -f debian/dkms_makefile debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.9/Makefile
+	cp -rf driver/src debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.14/
+	cp -rf driver/pcan.h debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.14/
+	cp -f debian/dkms_makefile debian/peak-linux-driver-dkms/usr/src/peak-linux-driver-7.14/Makefile
 	dh_installudev
 
 	dh_install
