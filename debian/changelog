@@ -1,4 +1,4 @@
-peak-linux-driver (7.14-1) UNRELEASED; urgency=low
+peak-linux-driver (7.14-1.drp70+1) wheezy-robotics; urgency=low
 
   * Non-maintainer upload.
   * New upstream version.
