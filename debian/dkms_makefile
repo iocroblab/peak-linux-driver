@@ -7,11 +7,13 @@ pcan-y += src/pcan_pciec.o
 pcan-y += src/pcan_isa.o 
 pcan-y += src/pcan_dongle.o
 pcan-y += src/pcan_pccard_kernel.o src/pcan_pccard.o
-pcan-y += src/pcan_usb_core.o src/pcan_usb.o src/pcan_usbpro.o src/pcan_timing.o
+pcan-y += src/pcan_usb_core.o src/pcan_usb.o src/pcan_usbpro.o src/pcan_timing.o src/pcan_usbfd.o
+pcan-y += src/pcan_netdev.o
+
 
 #pcan-y += gpcan_netdev.o
 
-ccflags-y := -I$(PWD) -DNO_DEBUG -DMODVERSIONS -DPARPORT_SUBSYSTEM -DUSB_SUPPORT -DPCI_SUPPORT -DPCIEC_SUPPORT -DISA_SUPPORT -DDONGLE_SUPPORT -DPCCARD_SUPPORT -DNO -DNO_RT
+ccflags-y := -I$(PWD) -DNO_DEBUG -DMODVERSIONS -DPARPORT_SUBSYSTEM -DUSB_SUPPORT -DPCI_SUPPORT -DPCIEC_SUPPORT -DISA_SUPPORT -DDONGLE_SUPPORT -DPCCARD_SUPPORT -DNO -DNO_RT -DNETDEV_SUPPORT
 
 KVERSION := $(shell uname -r)
 
