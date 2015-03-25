@@ -2,7 +2,7 @@ Source: peak-linux-driver
 Section: net
 Priority: extra
 Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
-Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms
+Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms, libpopt-dev
 Standards-Version: 3.9.3
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
 Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
@@ -12,7 +12,9 @@ Package: peak-linux-driver-utils
 Architecture: any
 Depends: ${misc:Depends}
 Description: PEAK-System CAN utils
- This package provides the tools pcan_make_devices and wstress from PEAK-System.
+ This package provides the obsolete tool pcan_make_devices and wstress 
+ from PEAK-System. Also contains some tests to check the CAN bus and 
+ pcan-settings util to label a PCAN-USB device.
 
 Package: libpcan0
 Section: libs

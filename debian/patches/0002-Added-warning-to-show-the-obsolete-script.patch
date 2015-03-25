@@ -1,0 +1,22 @@
+From: Leopold Palomo-Avellaneda <leopold.palomo@upc.edu>
+Date: Wed, 25 Mar 2015 16:53:24 +0100
+Subject: Added warning to show the obsolete script
+
+---
+ driver/pcan_make_devices |    3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/driver/pcan_make_devices b/driver/pcan_make_devices
+index ec118d9..34b5491 100755
+--- a/driver/pcan_make_devices
++++ b/driver/pcan_make_devices
+@@ -17,6 +17,9 @@ group="root"
+ mode="666"
+ usage="Usage: pcan_make_devices count-of-device-node-for-each-type [--help | -h]"
+ 
++echo "Warning !!!!!!!!!!!!!!!!!!!"
++echo "pcan_make_devices is obsolete with systems supporting udev"
++
+ if test $# -gt 0; then
+   case $1 in
+   [1-8])  ;;

@@ -1,3 +1,7 @@
 driver/pcan_make_devices /usr/bin
 driver/wstress /usr/bin
-
+test/bitratetest /usr/bin
+test/filtertest /usr/bin   
+test/pcan-settings /usr/sbin/
+test/receivetest /usr/bin
+test/transmitest /usr/bin
