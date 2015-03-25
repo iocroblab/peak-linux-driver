@@ -1,2 +1,3 @@
 lib/libpcan.h usr/include
 driver/pcan.h usr/include
+lib/libpcan.so usr/lib

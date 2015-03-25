@@ -31,7 +31,7 @@ Description: PEAK-System CAN library
 
 Package: peak-linux-driver-dkms
 Architecture: all
-Depends: dkms, ${misc:Depends},linux-headers-generic | linux-headers
+Depends: dkms, ${misc:Depends}, linux-headers-generic | linux-headers
 Description: PEAK-System CAN library
  This package contains the kernel source and DKMS hooks for module compilation
  as well as the udev rule file.

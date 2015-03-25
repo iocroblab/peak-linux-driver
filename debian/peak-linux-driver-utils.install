@@ -1,1 +1,3 @@
 driver/pcan_make_devices /usr/bin
+driver/wstress /usr/bin
+

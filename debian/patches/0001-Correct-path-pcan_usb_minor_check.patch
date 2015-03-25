@@ -1,0 +1,21 @@
+From: Leopold Palomo-Avellaneda <leopold.palomo@upc.edu>
+Date: Tue, 17 Mar 2015 10:11:13 +0100
+Subject: Correct-path-pcan_usb_minor_check
+
+---
+ driver/udev/45-pcan.rules |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/driver/udev/45-pcan.rules b/driver/udev/45-pcan.rules
+index af35382..5bafbee 100644
+--- a/driver/udev/45-pcan.rules
++++ b/driver/udev/45-pcan.rules
+@@ -8,7 +8,7 @@ ACTION!="add", GOTO="pcan_udev_end"
+ 
+ # create symlinks: /dev/pcanX -> /dev/pcanusbY
+ # (handles CONFIG_USB_DYNAMIC_MINORS)
+-KERNEL=="pcanusb*", PROGRAM="/usr/local/bin/pcan_usb_minor_check.bash %m", SYMLINK+="pcan%c", MODE="0666"
++KERNEL=="pcanusb*", PROGRAM="/usr/bin/pcan_usb_minor_check.bash %m", SYMLINK+="pcan%c", MODE="0666"
+ 
+ # create symlinks: /dev/pcanusb/devid=X -> /dev/pcanusbY (PCAN-USB only)
+ # only if devid is not the default value 0xff.
