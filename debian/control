@@ -12,7 +12,9 @@ Package: peak-linux-driver-utils
 Architecture: any
 Depends: ${misc:Depends}
 Description: PEAK-System CAN utils
- This package provides the tools pcan_make_devices and wstress from PEAK-System.
+ This package provides the obsolete tool pcan_make_devices and wstress 
+ from PEAK-System. Also contains some tests to check the CAN bus and 
+ pcan-settings util to label a PCAN-USB device.
 
 Package: libpcan0
 Section: libs
