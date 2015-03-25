@@ -21,6 +21,7 @@ build-arch: configure-stamp  build-arch-stamp
 build-arch-stamp:
 	dh_testdir
 	$(MAKE) -C lib
+	$(MAKE) -C test
 	touch $@
 
 build-indep:  configure-stamp build-indep-stamp
