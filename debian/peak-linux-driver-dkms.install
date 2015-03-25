@@ -1,2 +1,3 @@
 driver/udev/pcan_usb_minor_check.bash /usr/bin
+driver/udev/blacklist-peak.conf /etc/modprobe.d/
 
