@@ -1,3 +1,14 @@
+peak-linux-driver (7.14-1.drp70+2) wheezy-robotics; urgency=medium
+
+  * New version of drp
+  * Added wstress util
+  * Added .so link
+  * Add patch to solve program location
+  * Added script file
+  * Added missing files in the makefile
+
+ -- Leopold Palomo-Avellaneda <leo@alaxarxa.net>  Wed, 25 Mar 2015 14:48:37 +0100
+
 peak-linux-driver (7.14-1.drp70+1) wheezy-robotics; urgency=low
 
   * Non-maintainer upload.
