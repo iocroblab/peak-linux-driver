@@ -7,12 +7,12 @@ Uploaders: Markus Becker <mab@comnets.uni-bremen.de>,
 Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms, libpopt-dev
 Standards-Version: 3.9.6
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
-Vcs-Git: http://anonscm.debian.org/gitweb/?p=/collab-maint/peak-linux-driver.git
-Vcs-Browser: git://anonscm.debian.org/collab-maint/peak-linux-driver.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=/collab-maint/peak-linux-driver.git
+Vcs-Git: git://anonscm.debian.org/collab-maint/peak-linux-driver.git
 
 Package: peak-linux-driver-utils
 Architecture: any
-Depends: ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: PEAK-System CAN utils
  This package provides the obsolete tool pcan_make_devices and wstress 
  from PEAK-System. Also contains some tests to check the CAN bus and 
