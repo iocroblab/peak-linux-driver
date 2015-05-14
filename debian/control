@@ -1,15 +1,14 @@
 Source: peak-linux-driver
 Section: net
 Priority: extra
-Maintainer: Peak Linux Driver Debian Package <peak-linux-driver@packages.debian.org>
+Maintainer: Leopold Palomo-Avellaneda <leo@alaxarxa.net>
 Uploaders: Markus Becker <mab@comnets.uni-bremen.de>,
-	   Teemu Ikonen <tpikonen@gmail.com>,
-	   Leopold Palomo-Avellaneda <leo@alaxarxa.net>
+	   Teemu Ikonen <tpikonen@gmail.com>
 Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms, libpopt-dev
 Standards-Version: 3.9.6
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
-Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
-Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
+Vcs-Git: http://anonscm.debian.org/gitweb/?p=/collab-maint/peak-linux-driver.git
+Vcs-Browser: git://anonscm.debian.org/collab-maint/peak-linux-driver.git
 
 Package: peak-linux-driver-utils
 Architecture: any
