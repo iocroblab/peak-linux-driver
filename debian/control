@@ -1,7 +1,10 @@
 Source: peak-linux-driver
 Section: net
 Priority: extra
-Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
+Maintainer: Peak Linux Driver Debian Package <peak-linux-driver@packages.debian.org>
+Uploaders: Markus Becker <mab@comnets.uni-bremen.de>,
+	   Teemu Ikonen <tpikonen@gmail.com>,
+	   Leopold Palomo-Avellaneda <leo@alaxarxa.net>
 Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms, libpopt-dev
 Standards-Version: 3.9.6
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
