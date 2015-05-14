@@ -3,7 +3,7 @@ Section: net
 Priority: extra
 Maintainer: Markus Becker <mab@comnets.uni-bremen.de>
 Build-Depends: debhelper (>= 7.0.50~), bzip2, dkms, libpopt-dev
-Standards-Version: 3.9.3
+Standards-Version: 3.9.6
 Homepage: http://www.peak-system.com/fileadmin/media/linux/index.htm
 Vcs-Git: http://git.debian.org/git/collab-maint/peak-linux-driver.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/peak-linux-driver.git
